@@ -22,7 +22,8 @@ import { AccountResponseDto } from './dto/account-response.dto.js';
 @Controller('accounts')
 @UseGuards(ThrottlerGuard)
 export class AccountsController {
-  constructor(private readonly accountsService: AccountsService) {}
+  constructor(
+    private readonly accountsService: AccountsService) {}
 
   @Post()
   @ApiOperation({ summary: 'Create ephemeral account' })
@@ -33,7 +34,7 @@ export class AccountsController {
   })
   @ApiResponse({ status: 400, description: 'Invalid input' })
   @ApiBearerAuth()
-  async create(
+  public async create(
     @Body() createAccountDto: CreateAccountDto,
   ): Promise<AccountResponseDto> {
     return this.accountsService.create(createAccountDto);
@@ -47,14 +48,14 @@ export class AccountsController {
     type: AccountResponseDto,
   })
   @ApiResponse({ status: 404, description: 'Account not found' })
-  async findOne(@Param('id') id: string): Promise<AccountResponseDto> {
+  public async findOne(@Param('id') id: string): Promise<AccountResponseDto> {
     return this.accountsService.findOne(id);
   }
 
   @Get()
   @ApiOperation({ summary: 'List accounts' })
   @ApiResponse({ status: 200, description: 'List of accounts' })
-  async findAll(
+  public async findAll(
     @Query('status') status?: string,
     @Query('limit') limit = 50,
     @Query('offset') offset = 0,

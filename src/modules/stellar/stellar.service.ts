@@ -31,6 +31,8 @@ export class StellarService {
     const fundingSecret = this.configService.getOrThrow<string>('stellar.fundingSecret');
     const fundingKeypair = StellarSdk.Keypair.fromSecret(fundingSecret);
 
+    console.log(`funding secret: ${fundingSecret}`)
+
     const fundingAccount = await this.server.loadAccount(fundingKeypair.publicKey());
 
     const transaction = new StellarSdk.TransactionBuilder(fundingAccount, {

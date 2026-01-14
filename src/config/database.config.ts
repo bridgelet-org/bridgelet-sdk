@@ -1,6 +1,8 @@
 import { registerAs } from '@nestjs/config';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
+import { dirname } from 'path';
 import { DataSource, DataSourceOptions } from 'typeorm';
+import { fileURLToPath } from 'url';
 
 export default registerAs(
   'database',
@@ -15,11 +17,15 @@ export default registerAs(
       entities: [__dirname + '/../**/*.entity{.ts,.js}'],
       migrations: [__dirname + '/../database/migrations/*{.ts,.js}'],
       synchronize: process.env.DATABASE_SYNC === 'true',
+      autoLoadEntities: true,
       logging: process.env.DATABASE_LOGGING === 'true',
       ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
     },
   }),
 );
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 export const AppDataSource = new DataSource({
   type: 'postgres',

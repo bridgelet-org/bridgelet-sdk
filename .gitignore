@@ -3,6 +3,9 @@
 /node_modules
 /build
 
+# other folders
+/endpoints
+
 # Logs
 logs
 *.log

@@ -5,9 +5,7 @@ import { AppModule } from './app.module.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  await app.listen(process.env.PORT ?? 3000);
 
-  // Global validation pipe
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -16,13 +14,11 @@ async function bootstrap() {
     }),
   );
 
-  // CORS
   app.enableCors({
     origin: process.env.CORS_ORIGINS?.split(',') || '*',
     credentials: true,
   });
 
-  // Swagger documentation
   const config = new DocumentBuilder()
     .setTitle('Bridgelet SDK API')
     .setDescription('Ephemeral account management API for Stellar')

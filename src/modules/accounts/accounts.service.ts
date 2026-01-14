@@ -1,15 +1,11 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Account, AccountStatus } from './entities/account.entity.js';
 import { CreateAccountDto } from './dto/create-account.dto.js';
 import { AccountResponseDto } from './dto/account-response.dto.js';
 import { StellarService } from '../stellar/stellar.service.js';
-import * as jwt from 'jsonwebtoken';
+import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
 import { ConfigService } from '@nestjs/config';
 
@@ -19,10 +15,11 @@ export class AccountsService {
     @InjectRepository(Account)
     private accountsRepository: Repository<Account>,
     private configService: ConfigService,
+    private jwtService: JwtService,
     private stellarService: StellarService,
   ) {}
 
-  async create(
+  public async create(
     createAccountDto: CreateAccountDto,
   ): Promise<AccountResponseDto> {
     // Generate ephemeral keypair
@@ -77,7 +74,7 @@ export class AccountsService {
     };
   }
 
-  async findOne(id: string): Promise<AccountResponseDto> {
+  public async findOne(id: string): Promise<AccountResponseDto> {
     const account = await this.accountsRepository.findOne({ where: { id } });
 
     if (!account) {
@@ -87,7 +84,7 @@ export class AccountsService {
     return this.mapToResponseDto(account);
   }
 
-  async findAll({
+  public async findAll({
     status,
     limit,
     offset,
@@ -109,12 +106,15 @@ export class AccountsService {
   }
 
   private generateClaimToken(publicKey: string): string {
-    const secret = this.configService.get<string>('app.jwtSecret') ?? 'fallback secret';
-    const expiry = this.configService.get<number>('app.claimTokenExpiry') ?? '2592000';
+    const secret =
+      this.configService.get<string>('app.jwtSecret') ?? 'fallback secret';
+    const expiry =
+      this.configService.get<number>('app.claimTokenExpiry') ?? '2592000';
 
-    return jwt.sign({ publicKey, type: 'claim' }, secret, {
-      expiresIn: `${expiry}s`,
-    });
+    return this.jwtService.sign(
+      { publicKey, type: 'claim' },
+      { expiresIn: `${expiry}s` },
+    );
   }
 
   private generateClaimUrl(token: string): string {
