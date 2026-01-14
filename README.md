@@ -122,6 +122,13 @@ See [Deployment Guide](./docs/deployment.md) for production setup.
 - [Webhook Events](./docs/webhook-events.md)
 - [Deployment Guide](./docs/deployment.md)
 
+Visit http://localhost:3000/api/docs for API documentation.
+
+See [Getting Started Guide](../docs/getting-started.pdf) for full setup instructions.
+
+## Support
+(Nest)[https://nestjs.com](https://nestjs.com/)
+
 ## License
 
-MIT
+UNLICENSED
