@@ -11,7 +11,7 @@ import {
 import { Account } from '../../accounts/entities/account.entity.js';
 
 @Entity('claims')
-@Index(['accountId'])
+// @Index(['accountId'])
 export class Claim {
   @PrimaryGeneratedColumn('uuid')
   id: string;

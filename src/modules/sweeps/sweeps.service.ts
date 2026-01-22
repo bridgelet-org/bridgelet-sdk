@@ -55,6 +55,13 @@ export class SweepsService {
       success: true,
       txHash: txResult.hash,
       contractAuthHash: authResult.hash,
+    // TODO: Step 2 - Authorize via contract (Issue #3)
+    // TODO: Step 3 - Execute transaction (Issue #4)
+
+    return {
+      success: false,
+      txHash: '',
+      contractAuthHash: '',
       amountSwept: dto.amount,
       destination: dto.destinationAddress,
       timestamp: new Date(),
