@@ -1,4 +1,8 @@
-import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   Horizon,
@@ -20,7 +24,8 @@ export class TransactionProvider {
   private readonly networkPassphrase: string;
 
   constructor(private readonly configService: ConfigService) {
-    const horizonUrl = this.configService.getOrThrow<string>('stellar.horizonUrl');
+    const horizonUrl =
+      this.configService.getOrThrow<string>('stellar.horizonUrl');
     this.server = new Horizon.Server(horizonUrl);
 
     const network = this.configService.getOrThrow<string>('stellar.network');
@@ -65,134 +70,137 @@ export class TransactionProvider {
           }),
         )
         .setTimeout(30)
-        .build();Continue12:46// Sign with ephemeral account
-transaction.sign(sourceKeypair);
-  // Submit transaction
-  const result = await this.server.submitTransaction(transaction);
+        .build();
+      Continue12: 46; // Sign with ephemeral account
+      transaction.sign(sourceKeypair);
+      // Submit transaction
+      const result = await this.server.submitTransaction(transaction);
 
-  this.logger.log(`Sweep transaction successful: ${result.hash}`);
+      this.logger.log(`Sweep transaction successful: ${result.hash}`);
 
-  return {
-    hash: result.hash,
-    ledger: result.ledger,
-    successful: result.successful,
-    timestamp: new Date(),
-  };
-} catch (error) {
-  this.logger.error(
-    `Sweep transaction failed: ${error.message}`,
-    error.stack,
-  );
+      return {
+        hash: result.hash,
+        ledger: result.ledger,
+        successful: result.successful,
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      this.logger.error(
+        `Sweep transaction failed: ${error.message}`,
+        error.stack,
+      );
 
-  // Extract more details from Horizon error
-  if (error.response?.data) {
-    const { extras } = error.response.data;
-    this.logger.error(`Transaction extras: ${JSON.stringify(extras)}`);
+      // Extract more details from Horizon error
+      if (error.response?.data) {
+        const { extras } = error.response.data;
+        this.logger.error(`Transaction extras: ${JSON.stringify(extras)}`);
+      }
+
+      throw new InternalServerErrorException(
+        `Sweep transaction failed: ${error.message}`,
+      );
+    }
   }
-
-  throw new InternalServerErrorException(
-    `Sweep transaction failed: ${error.message}`,
-  );
-}
-}
-/**
+  /**
 
 Merge ephemeral account into destination to reclaim base reserve
 */
-public async mergeAccount(params: MergeAccountParams): Promise<TransactionResult> {
-this.logger.log(
-`Merging account to reclaim reserve: ${params.destinationAddress}`,
-);
+  public async mergeAccount(
+    params: MergeAccountParams,
+  ): Promise<TransactionResult> {
+    this.logger.log(
+      `Merging account to reclaim reserve: ${params.destinationAddress}`,
+    );
 
-try {
-  // Create keypair from ephemeral secret
-  const sourceKeypair = Keypair.fromSecret(params.ephemeralSecret);
+    try {
+      // Create keypair from ephemeral secret
+      const sourceKeypair = Keypair.fromSecret(params.ephemeralSecret);
 
-  // Load source account
-  const sourceAccount = await this.server.loadAccount(
-    sourceKeypair.publicKey(),
-  );
+      // Load source account
+      const sourceAccount = await this.server.loadAccount(
+        sourceKeypair.publicKey(),
+      );
 
-  // Build account merge transaction
-  const transaction = new TransactionBuilder(sourceAccount, {
-    fee: BASE_FEE,
-    networkPassphrase: this.networkPassphrase,
-  })
-    .addOperation(
-      Operation.accountMerge({
-        destination: params.destinationAddress,
-      }),
-    )
-    .setTimeout(30)
-    .build();
+      // Build account merge transaction
+      const transaction = new TransactionBuilder(sourceAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: this.networkPassphrase,
+      })
+        .addOperation(
+          Operation.accountMerge({
+            destination: params.destinationAddress,
+          }),
+        )
+        .setTimeout(30)
+        .build();
 
-  // Sign with ephemeral account
-  transaction.sign(sourceKeypair);
+      // Sign with ephemeral account
+      transaction.sign(sourceKeypair);
 
-  // Submit transaction
-  const result = await this.server.submitTransaction(transaction);
+      // Submit transaction
+      const result = await this.server.submitTransaction(transaction);
 
-  this.logger.log(`Account merge successful: ${result.hash}`);
+      this.logger.log(`Account merge successful: ${result.hash}`);
 
-  return {
-    hash: result.hash,
-    ledger: result.ledger,
-    successful: result.successful,
-    timestamp: new Date(),
-  };
-} catch (error) {
-  // Account merge can fail if account still has offers or trustlines
-  // This is non-critical as the main sweep was successful
-  this.logger.warn(`Account merge failed (non-critical): ${error.message}`);
+      return {
+        hash: result.hash,
+        ledger: result.ledger,
+        successful: result.successful,
+        timestamp: new Date(),
+      };
+    } catch (error) {
+      // Account merge can fail if account still has offers or trustlines
+      // This is non-critical as the main sweep was successful
+      this.logger.warn(`Account merge failed (non-critical): ${error.message}`);
 
-  throw error; // Re-throw so caller can handle
-}
-}
-/**
+      throw error; // Re-throw so caller can handle
+    }
+  }
+  /**
 
 Parse asset string into Stellar Asset object
 */
-private parseAsset(assetString: string): Asset {
-if (assetString === 'native' || assetString === 'XLM') {
-return Asset.native();
-}
+  private parseAsset(assetString: string): Asset {
+    if (assetString === 'native' || assetString === 'XLM') {
+      return Asset.native();
+    }
 
-// Format: "CODE:ISSUER"
-const parts = assetString.split(':');
-if (parts.length !== 2) {
-  throw new Error(`Invalid asset format: ${assetString}`);
-}
+    // Format: "CODE:ISSUER"
+    const parts = assetString.split(':');
+    if (parts.length !== 2) {
+      throw new Error(`Invalid asset format: ${assetString}`);
+    }
 
-const [code, issuer] = parts;
-return new Asset(code, issuer);
-}
-/**
+    const [code, issuer] = parts;
+    return new Asset(code, issuer);
+  }
+  /**
 
 Get account balance for verification
 */
-public async getAccountBalance(
-publicKey: string,
-asset: string,
-): Promise<string> {
-try {
-const account = await this.server.loadAccount(publicKey);
-const parsedAsset = this.parseAsset(asset);
-const balance = account.balances.find((b) => {
-if (parsedAsset.isNative()) {
-return b.asset_type === 'native';
-}
-return (
-b.asset_type !== 'native' &&
-'asset_code' in b &&
-'asset_issuer' in b &&
-b.asset_code === parsedAsset.getCode() &&
-b.asset_issuer === parsedAsset.getIssuer()
-);
-});
-return balance?.balance || '0';
-} catch (error) {
-this.logger.error(`Failed to get account balance: ${error.message}`);
-throw error;
-}
-}
+  public async getAccountBalance(
+    publicKey: string,
+    asset: string,
+  ): Promise<string> {
+    try {
+      const account = await this.server.loadAccount(publicKey);
+      const parsedAsset = this.parseAsset(asset);
+      const balance = account.balances.find((b) => {
+        if (parsedAsset.isNative()) {
+          return b.asset_type === 'native';
+        }
+        return (
+          b.asset_type !== 'native' &&
+          'asset_code' in b &&
+          'asset_issuer' in b &&
+          b.asset_code === parsedAsset.getCode() &&
+          b.asset_issuer === parsedAsset.getIssuer()
+        );
+      });
+      return balance?.balance || '0';
+    } catch (error) {
+      this.logger.error(`Failed to get account balance: ${error.message}`);
+      throw error;
+    }
+  }
 }

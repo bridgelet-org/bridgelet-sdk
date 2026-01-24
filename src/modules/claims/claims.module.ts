@@ -8,14 +8,9 @@ import { Account } from '../accounts/entities/account.entity.js';
 import { ClaimLookupProvider } from './providers/claim-lookup.provider.js';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Claim, Account]),
-  ],
+  imports: [TypeOrmModule.forFeature([Claim, Account])],
   controllers: [ClaimsController],
-  providers: [
-    ClaimsService,
-    ClaimLookupProvider,
-  ],
+  providers: [ClaimsService, ClaimLookupProvider],
   exports: [ClaimsService],
 })
 export class ClaimsModule {}

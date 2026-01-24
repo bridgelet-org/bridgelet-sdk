@@ -1,10 +1,5 @@
 import { Controller, Get, Param } from '@nestjs/common';
-import {
-  ApiOperation,
-  ApiResponse,
-  ApiTags,
-  ApiParam,
-} from '@nestjs/swagger';
+import { ApiOperation, ApiResponse, ApiTags, ApiParam } from '@nestjs/swagger';
 import { ClaimsService } from './claims.service.js';
 import { ClaimDetailsDto } from './dto/claim-details.dto.js';
 
@@ -26,9 +21,7 @@ export class ClaimsController {
     type: ClaimDetailsDto,
   })
   @ApiResponse({ status: 404, description: 'Claim not found' })
-  public async findOne(
-    @Param('id') id: string,
-  ): Promise<ClaimDetailsDto> {
+  public async findOne(@Param('id') id: string): Promise<ClaimDetailsDto> {
     return this.claimsService.findClaimById(id);
   }
 }

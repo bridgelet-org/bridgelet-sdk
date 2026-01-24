@@ -9,7 +9,8 @@ export class StellarService {
   private network: string;
 
   constructor(private configService: ConfigService) {
-    const horizonUrl = this.configService.getOrThrow<string>('stellar.horizonUrl');
+    const horizonUrl =
+      this.configService.getOrThrow<string>('stellar.horizonUrl');
     this.network = this.configService.getOrThrow<string>('stellar.network');
     this.server = new StellarSdk.Horizon.Server(horizonUrl);
 
@@ -28,12 +29,16 @@ export class StellarService {
   }): Promise<string> {
     this.logger.log(`Creating ephemeral account: ${params.publicKey}`);
 
-    const fundingSecret = this.configService.getOrThrow<string>('stellar.fundingSecret');
+    const fundingSecret = this.configService.getOrThrow<string>(
+      'stellar.fundingSecret',
+    );
     const fundingKeypair = StellarSdk.Keypair.fromSecret(fundingSecret);
 
-    console.log(`funding secret: ${fundingSecret}`)
+    console.log(`funding secret: ${fundingSecret}`);
 
-    const fundingAccount = await this.server.loadAccount(fundingKeypair.publicKey());
+    const fundingAccount = await this.server.loadAccount(
+      fundingKeypair.publicKey(),
+    );
 
     const transaction = new StellarSdk.TransactionBuilder(fundingAccount, {
       fee: StellarSdk.BASE_FEE,
@@ -43,7 +48,7 @@ export class StellarService {
         StellarSdk.Operation.createAccount({
           destination: params.publicKey,
           startingBalance: '2',
-        })
+        }),
       )
       .setTimeout(30)
       .build();

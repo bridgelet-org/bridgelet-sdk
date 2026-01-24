@@ -136,5 +136,15 @@ export class ContractProvider {
       contractId: this.contractId,
       version: '0.1.0',
     };
+  private generateAuthHash(ephemeralKey: string, destination: string): string {
+    // Simple hash generation for demonstration
+    // In production, use proper cryptographic hashing
+    const combined = `${ephemeralKey}:${destination}:${Date.now()}`;
+    let hash = '';
+    for (let i = 0; i < 64; i++) {
+      const charCode = combined.charCodeAt(i % combined.length);
+      hash += ((charCode * (i + 1)) % 16).toString(16);
+    }
+    return hash;
   }
 }

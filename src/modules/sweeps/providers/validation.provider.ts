@@ -130,7 +130,10 @@ export class ValidationProvider {
     }
 
     if (!account.publicKey) {
-      return { canSweep: false, reason: 'No public key associated with account' };
+      return {
+        canSweep: false,
+        reason: 'No public key associated with account',
+      };
     }
 
     if (account.status === AccountStatus.CLAIMED) {

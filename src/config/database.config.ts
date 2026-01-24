@@ -19,7 +19,10 @@ export default registerAs(
       synchronize: process.env.DATABASE_SYNC === 'true',
       autoLoadEntities: true,
       logging: process.env.DATABASE_LOGGING === 'true',
-      ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : false,
+      ssl:
+        process.env.DATABASE_SSL === 'true'
+          ? { rejectUnauthorized: false }
+          : false,
     },
   }),
 );

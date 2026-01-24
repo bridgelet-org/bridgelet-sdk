@@ -6,4 +6,3 @@ export interface ExecuteSweepDto {
   amount: string;
   asset: string;
 }
-

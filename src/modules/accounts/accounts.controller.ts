@@ -22,8 +22,7 @@ import { AccountResponseDto } from './dto/account-response.dto.js';
 @Controller('accounts')
 @UseGuards(ThrottlerGuard)
 export class AccountsController {
-  constructor(
-    private readonly accountsService: AccountsService) {}
+  constructor(private readonly accountsService: AccountsService) {}
 
   @Post()
   @ApiOperation({ summary: 'Create ephemeral account' })

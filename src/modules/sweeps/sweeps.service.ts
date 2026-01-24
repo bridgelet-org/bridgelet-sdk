@@ -45,7 +45,10 @@ export class SweepsService {
   /**
    * Check if account can be swept (validation only, no execution)
    */
-  public async canSweep(accountId: string, destinationAddress: string): Promise<boolean> {
+  public async canSweep(
+    accountId: string,
+    destinationAddress: string,
+  ): Promise<boolean> {
     return this.validationProvider.canSweep(accountId, destinationAddress);
   }
 

@@ -27,13 +27,15 @@ export class ClaimRedemptionResponseDto {
 
   @ApiProperty({
     example: 'GBBD47UZQ5YLQYYTWTCB7X3DUEEVZMDVGFBRNZPMZDWQWKCFN3EOZQKQ',
-    description: 'The destination Stellar wallet address that received the funds',
+    description:
+      'The destination Stellar wallet address that received the funds',
   })
   destination: string;
 
   @ApiProperty({
     example: '2026-01-21T15:45:30Z',
-    description: 'The timestamp when the claim was redeemed and funds were swept',
+    description:
+      'The timestamp when the claim was redeemed and funds were swept',
   })
   sweptAt: Date;
 

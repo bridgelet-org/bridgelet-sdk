@@ -23,6 +23,7 @@ The Bridgelet SDK is a NestJS-based backend service that manages the lifecycle o
 - Admin dashboard API endpoints
 
 ## Project Structure
+
 ```
 src/
 ├── modules/
@@ -40,6 +41,7 @@ src/
 ```
 
 ## Installation
+
 ```bash
 # Install dependencies
 npm install
@@ -56,6 +58,7 @@ npm run start:dev
 ```
 
 ## Environment Variables
+
 ```env
 # Database
 DATABASE_HOST=localhost
@@ -81,22 +84,24 @@ NODE_ENV=development
 ## API Documentation
 
 Once running, access API docs at:
+
 - Swagger: `http://localhost:3000/api/docs`
 
 ## Key Endpoints
 
-POST   /accounts          # Create ephemeral account
-GET    /accounts/:id      # Get account details
-POST   /claims/initiate   # Generate claim token
-POST   /claims/redeem     # Redeem claim and sweep
-GET    /webhooks          # List webhook subscriptions
-POST   /webhooks          # Subscribe to events
+POST /accounts # Create ephemeral account
+GET /accounts/:id # Get account details
+POST /claims/initiate # Generate claim token
+POST /claims/redeem # Redeem claim and sweep
+GET /webhooks # List webhook subscriptions
+POST /webhooks # Subscribe to events
 
 ## Database Schema
 
 See [Database Schema Documentation](./docs/database-schema.md)
 
 ## Development
+
 ```bash
 # Run tests
 npm run test
@@ -127,6 +132,7 @@ Visit http://localhost:3000/api/docs for API documentation.
 See [Getting Started Guide](../docs/getting-started.pdf) for full setup instructions.
 
 ## Support
+
 (Nest)[https://nestjs.com](https://nestjs.com/)
 
 ## License
