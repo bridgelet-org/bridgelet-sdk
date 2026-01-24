@@ -62,7 +62,7 @@ export class Account {
   updatedAt: Date;
 
   @Column({ type: 'timestamp', nullable: true })
-  claimedAt: Date;
+  claimedAt: Date | null;
 
   @Column({ type: 'timestamp', nullable: true })
   expiredAt: Date;
