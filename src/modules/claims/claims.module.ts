@@ -7,11 +7,17 @@ import { Account } from '../accounts/entities/account.entity.js';
 
 import { ClaimLookupProvider } from './providers/claim-lookup.provider.js';
 import { TokenVerificationProvider } from './providers/token-verification.provider.js';
+import { ClaimRedemptionProvider } from './providers/claim-redemption.provider.js';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Claim, Account])],
   controllers: [ClaimsController],
-  providers: [ClaimsService, ClaimLookupProvider, TokenVerificationProvider],
+  providers: [
+    ClaimsService,
+    ClaimLookupProvider,
+    ClaimRedemptionProvider,
+    TokenVerificationProvider
+  ],
   exports: [ClaimsService],
 })
 export class ClaimsModule {}

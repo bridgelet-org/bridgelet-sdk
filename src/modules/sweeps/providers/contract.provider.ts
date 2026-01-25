@@ -1,5 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  Contract,
+  SorobanRpc,
+  TransactionBuilder,
+  BASE_FEE,
+  Networks,
+  Address,
+  xdr,
+  hash,
+} from '@stellar/stellar-sdk';
 import type { AuthorizeSweepParams } from '../interfaces/authorize-sweep-params.interface.js';
 import type { ContractAuthResult } from '../interfaces/contract-auth-result.interface.js';
 
@@ -7,80 +17,125 @@ import type { ContractAuthResult } from '../interfaces/contract-auth-result.inte
 export class ContractProvider {
   private readonly logger = new Logger(ContractProvider.name);
   private readonly contractId: string;
+  private readonly sorobanRpcUrl: string;
+  private readonly networkPassphrase: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.contractId = this.configService.get<string>('stellar.contractId', '');
-    this.logger.log('Initialized ContractProvider');
+    this.contractId = this.configService.getOrThrow<string>(
+      'stellar.contracts.ephemeralAccount',
+    );
+    this.sorobanRpcUrl = this.configService.getOrThrow<string>(
+      'stellar.sorobanRpcUrl',
+    );
+
+    const network = this.configService.getOrThrow<string>('stellar.network');
+    this.networkPassphrase =
+      network === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
+
+    this.logger.log(`Initialized ContractProvider with contract: ${this.contractId}`);
   }
 
   /**
    * Authorize sweep via smart contract
-   * This validates that the sweep is authorized before execution
+   * Calls the contract's sweep() function to validate authorization
    */
   public async authorizeSweep(
     params: AuthorizeSweepParams,
   ): Promise<ContractAuthResult> {
     this.logger.log(
-      `Authorizing sweep for ephemeral key: ${params.ephemeralPublicKey}`,
+      `Authorizing sweep for account: ${params.ephemeralPublicKey}`,
     );
 
     try {
-      // In a full implementation, this would interact with a Soroban smart contract
-      // to verify authorization for the sweep operation.
-      // For now, we implement a basic authorization check.
+      // Create Soroban RPC server connection
+      const server = new SorobanRpc.Server(this.sorobanRpcUrl);
 
-      // Validate the ephemeral public key format
-      if (!this.isValidStellarAddress(params.ephemeralPublicKey)) {
-        throw new Error('Invalid ephemeral public key format');
+      // Create contract instance
+      const contract = new Contract(this.contractId);
+
+      // Prepare destination address parameter
+      const destination = Address.fromString(params.destinationAddress);
+
+      // Generate authorization signature
+      // In production, this would be signed by an authorized key
+      // For MVP, we create a dummy signature
+      const authSignature = this.generateAuthSignature(params);
+
+      // Build contract invocation transaction
+      const account = await server.getAccount(params.ephemeralPublicKey);
+
+      const transaction = new TransactionBuilder(account, {
+        fee: BASE_FEE,
+        networkPassphrase: this.networkPassphrase,
+      })
+        .addOperation(
+          contract.call(
+            'sweep',
+            destination.toScVal(),
+            xdr.ScVal.scvBytes(authSignature),
+          ),
+        )
+        .setTimeout(30)
+        .build();
+
+      // Simulate contract call first
+      const simulated = await server.simulateTransaction(transaction);
+
+      if (SorobanRpc.Api.isSimulationError(simulated)) {
+        throw new Error(`Contract simulation failed: ${simulated.error}`);
       }
 
-      // Validate the destination address format
-      if (!this.isValidStellarAddress(params.destinationAddress)) {
-        throw new Error('Invalid destination address format');
-      }
+      // For MVP, we don't actually submit this transaction
+      // The sweep will be handled by direct Stellar payment
+      // In production, this would be submitted to enforce on-chain authorization
 
-      // Generate a mock authorization hash
-      // In production, this would be the transaction hash from the contract call
-      const authHash = this.generateAuthHash(
-        params.ephemeralPublicKey,
-        params.destinationAddress,
-      );
-
-      this.logger.log(`Sweep authorized with hash: ${authHash}`);
+      this.logger.log('Contract authorization successful');
 
       return {
         authorized: true,
-        hash: authHash,
+        hash: 'contract-auth-hash', // Would be actual tx hash in production
         timestamp: new Date(),
       };
     } catch (error) {
-      this.logger.error(`Sweep authorization failed: ${error.message}`);
-      throw error;
+      this.logger.error(
+        `Contract authorization failed: ${error.message}`,
+        error.stack,
+      );
+      throw new InternalServerErrorException(
+        `Contract authorization failed: ${error.message}`,
+      );
     }
   }
 
   /**
-   * Verify if a sweep authorization is still valid
+   * Generate authorization signature for sweep
+   * In production: Sign with authorized private key
+   * For MVP: Generate dummy signature
    */
-  public async verifyAuthorization(authHash: string): Promise<boolean> {
-    this.logger.log(`Verifying authorization: ${authHash}`);
+  private generateAuthSignature(params: AuthorizeSweepParams): Buffer {
+    // TODO: Implement proper signature generation
+    // Should sign hash of (ephemeralPublicKey + destinationAddress + timestamp)
+    // with SDK's authorized signing key
 
-    // In a full implementation, this would query the smart contract
-    // to verify the authorization is still valid
-    return authHash.length === 64;
+    // For MVP: Return dummy 64-byte signature
+    const message = `${params.ephemeralPublicKey}:${params.destinationAddress}`;
+    const messageHash = hash(Buffer.from(message));
+
+    // Pad to 64 bytes
+    const signature = Buffer.alloc(64);
+    messageHash.copy(signature, 0);
+
+    return signature;
   }
 
   /**
-   * Validate Stellar address format
+   * Check contract status and version
    */
-  private isValidStellarAddress(address: string): boolean {
-    return /^G[A-Z2-7]{55}$/.test(address);
-  }
-
-  /**
-   * Generate authorization hash
-   * In production, this would come from the smart contract
-   */
+  public async getContractInfo(): Promise<{ contractId: string; version: string }> {
+    return {
+      contractId: this.contractId,
+      version: '0.1.0',
+    };
   private generateAuthHash(ephemeralKey: string, destination: string): string {
     // Simple hash generation for demonstration
     // In production, use proper cryptographic hashing
