@@ -31,15 +31,20 @@ export class ClaimsController {
 
   @Post('verify')
   @ApiOperation({ summary: 'Verify claim token validity' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Token is valid and claim is available',
-    type: ClaimVerificationResponseDto 
+    type: ClaimVerificationResponseDto,
   })
   @ApiResponse({ status: 401, description: 'Invalid or expired token' })
   @ApiResponse({ status: 409, description: 'Claim already redeemed' })
-  @ApiResponse({ status: 400, description: 'Account has not received payment or invalid request' })
-  public async verifyClaim(@Body() verifyClaimDto: VerifyClaimDto): Promise<ClaimVerificationResponseDto> {
+  @ApiResponse({
+    status: 400,
+    description: 'Account has not received payment or invalid request',
+  })
+  public async verifyClaim(
+    @Body() verifyClaimDto: VerifyClaimDto,
+  ): Promise<ClaimVerificationResponseDto> {
     return this.claimsService.verifyClaimToken(verifyClaimDto.claimToken);
   }
 
