@@ -22,7 +22,8 @@ export class ClaimRedemptionProvider {
     private accountsRepository: Repository<Account>,
     private tokenVerificationProvider: TokenVerificationProvider,
     private sweepsService: SweepsService,
-    private webhooksService: WebhooksService,
+    // TEMPORARY: WebhooksService not yet implemented - commented out to allow dev server to start
+    // private webhooksService: WebhooksService,
   ) {}
 
   async redeemClaim(
@@ -102,16 +103,16 @@ export class ClaimRedemptionProvider {
 
       this.logger.log(`Claim redeemed successfully: ${claim.id}`);
 
-      // Fire webhook
-      await this.webhooksService.triggerEvent('sweep.completed', {
-        accountId: account.id,
-        amount: account.amount,
-        asset: account.asset,
-        destination: destinationAddress,
-        txHash: sweepResult.txHash,
-        sweptAt: claim.claimedAt,
-        metadata: account.metadata,
-      });
+      // TEMPORARY: WebhooksService not yet implemented - webhook trigger commented out
+      // await this.webhooksService.triggerEvent('sweep.completed', {
+      //   accountId: account.id,
+      //   amount: account.amount,
+      //   asset: account.asset,
+      //   destination: destinationAddress,
+      //   txHash: sweepResult.txHash,
+      //   sweptAt: claim.claimedAt,
+      //   metadata: account.metadata,
+      // });
 
       return {
         success: true,
@@ -133,15 +134,15 @@ export class ClaimRedemptionProvider {
         error.stack,
       );
 
-      // Fire webhook for failed sweep
-      await this.webhooksService.triggerEvent('sweep.failed', {
-        accountId: account.id,
-        amount: account.amount,
-        asset: account.asset,
-        destination: destinationAddress,
-        error: error.message,
-        timestamp: new Date(),
-      });
+      // TEMPORARY: WebhooksService not yet implemented - webhook trigger commented out
+      // await this.webhooksService.triggerEvent('sweep.failed', {
+      //   accountId: account.id,
+      //   amount: account.amount,
+      //   asset: account.asset,
+      //   destination: destinationAddress,
+      //   error: error.message,
+      //   timestamp: new Date(),
+      // });
 
       throw error;
     }
