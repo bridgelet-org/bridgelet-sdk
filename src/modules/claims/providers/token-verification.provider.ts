@@ -1,4 +1,10 @@
-import { Injectable, UnauthorizedException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -32,10 +38,10 @@ export class TokenVerificationProvider {
     try {
       // Decode and verify JWT token
       const payload = this.decodeClaimToken(token);
-      
+
       // Hash the token to look up the associated account
       const tokenHash = this.hashToken(token);
-      
+
       // Find the account by token hash
       const account = await this.accountRepository.findOne({
         where: { claimTokenHash: tokenHash },
@@ -51,11 +57,15 @@ export class TokenVerificationProvider {
 
       // Check if current time hasn't exceeded the account's expiry time
       if (new Date() > account.expiresAt) {
-        this.logger.warn(`Account ${account.id} has expired at ${account.expiresAt}`);
+        this.logger.warn(
+          `Account ${account.id} has expired at ${account.expiresAt}`,
+        );
         throw new UnauthorizedException('Claim token has expired');
       }
 
-      this.logger.log(`Claim token verified successfully for account: ${account.id}`);
+      this.logger.log(
+        `Claim token verified successfully for account: ${account.id}`,
+      );
 
       return {
         valid: true,
@@ -65,12 +75,14 @@ export class TokenVerificationProvider {
         expiresAt: account.expiresAt,
       };
     } catch (error) {
-      if (error instanceof UnauthorizedException || 
-          error instanceof ConflictException || 
-          error instanceof BadRequestException) {
+      if (
+        error instanceof UnauthorizedException ||
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
-      
+
       this.logger.error('Unexpected error during token verification', error);
       throw error;
     }
@@ -83,9 +95,9 @@ export class TokenVerificationProvider {
   private decodeClaimToken(token: string): ClaimTokenPayload {
     try {
       const jwtSecret = this.configService.getOrThrow<string>('JWT_SECRET');
-      
+
       const payload = jwt.verify(token, jwtSecret) as ClaimTokenPayload;
-      
+
       // Verify token type is 'claim'
       if (payload.type !== 'claim') {
         this.logger.warn(`Invalid token type: ${payload.type}`);
@@ -98,12 +110,12 @@ export class TokenVerificationProvider {
         this.logger.warn('Token has expired');
         throw new UnauthorizedException('Token has expired');
       }
-      
+
       if (error instanceof JsonWebTokenError) {
         this.logger.warn('Invalid token signature');
         throw new UnauthorizedException('Invalid token signature');
       }
-      
+
       throw error;
     }
   }
@@ -113,23 +125,23 @@ export class TokenVerificationProvider {
       case AccountStatus.CLAIMED:
         this.logger.warn(`Account ${account.id} has already been claimed`);
         throw new ConflictException('Claim has already been redeemed');
-        
+
       case AccountStatus.EXPIRED:
         this.logger.warn(`Account ${account.id} has expired`);
         throw new UnauthorizedException('Account has expired');
-        
+
       case AccountStatus.PENDING_PAYMENT:
         this.logger.warn(`Account ${account.id} has not received payment`);
         throw new BadRequestException('Account has not received payment');
-        
+
       case AccountStatus.FAILED:
         this.logger.warn(`Account ${account.id} is in failed state`);
         throw new BadRequestException('Account is in failed state');
-        
+
       case AccountStatus.PENDING_CLAIM:
         // This is the expected status for claim verification
         break;
-        
+
       default:
         this.logger.warn(`Unknown account status: ${account.status}`);
         throw new BadRequestException('Invalid account status');

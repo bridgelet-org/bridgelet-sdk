@@ -18,7 +18,9 @@ export class ClaimsService {
     return this.claimLookupProvider.findClaimById(id);
   }
 
-  public async verifyClaimToken(token: string): Promise<ClaimVerificationResponseDto> {
+  public async verifyClaimToken(
+    token: string,
+  ): Promise<ClaimVerificationResponseDto> {
     return this.tokenVerificationProvider.verifyClaimToken(token);
   }
   public async redeemClaim(

@@ -57,7 +57,9 @@ export class ClaimRedemptionProvider {
       });
 
       if (!existingClaim) {
-        throw new BadRequestException('Claim record not found for already redeemed account');
+        throw new BadRequestException(
+          'Claim record not found for already redeemed account',
+        );
       }
 
       return {

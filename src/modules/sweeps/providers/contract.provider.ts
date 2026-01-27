@@ -1,4 +1,8 @@
-import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  InternalServerErrorException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
   Contract,
@@ -32,7 +36,9 @@ export class ContractProvider {
     this.networkPassphrase =
       network === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET;
 
-    this.logger.log(`Initialized ContractProvider with contract: ${this.contractId}`);
+    this.logger.log(
+      `Initialized ContractProvider with contract: ${this.contractId}`,
+    );
   }
 
   /**
@@ -131,7 +137,10 @@ export class ContractProvider {
   /**
    * Check contract status and version
    */
-  public async getContractInfo(): Promise<{ contractId: string; version: string }> {
+  public async getContractInfo(): Promise<{
+    contractId: string;
+    version: string;
+  }> {
     return {
       contractId: this.contractId,
       version: '0.1.0',
@@ -149,4 +158,3 @@ export class ContractProvider {
     return hash;
   }
 }
-

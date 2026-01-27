@@ -16,7 +16,7 @@ import { ClaimRedemptionProvider } from './providers/claim-redemption.provider.j
     ClaimsService,
     ClaimLookupProvider,
     ClaimRedemptionProvider,
-    TokenVerificationProvider
+    TokenVerificationProvider,
   ],
   exports: [ClaimsService],
 })
