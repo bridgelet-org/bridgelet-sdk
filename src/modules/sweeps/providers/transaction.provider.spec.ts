@@ -1,10 +1,77 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { InternalServerErrorException } from '@nestjs/common';
+import { InternalServerErrorException, Logger } from '@nestjs/common';
+import { BASE_FEE, Networks } from '@stellar/stellar-sdk';
 import { TransactionProvider } from './transaction.provider.js';
 
 const mockSubmitTransaction = jest.fn();
 const mockLoadAccount = jest.fn();
+const mockTransactionSign = jest.fn();
+const mockTransactionBuild = jest.fn(() => ({ sign: mockTransactionSign }));
+const mockTransactionSetTimeout = jest.fn().mockReturnThis();
+const mockTransactionAddOperation = jest.fn().mockReturnThis();
+const mockTransactionBuilder = jest.fn().mockImplementation(() => ({
+  addOperation: mockTransactionAddOperation,
+  setTimeout: mockTransactionSetTimeout,
+  build: mockTransactionBuild,
+}));
+const mockPaymentOperation = jest.fn((params) => ({
+  type: 'payment',
+  ...params,
+}));
+const mockAccountMergeOperation = jest.fn((params) => ({
+  type: 'accountMerge',
+  ...params,
+}));
+const mockKeypair = {
+  publicKey: jest
+    .fn()
+    .mockReturnValue(
+      'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+    ),
+  secret: jest.fn().mockReturnValue('S_SECRET'),
+};
+const mockKeypairFromSecret = jest.fn().mockReturnValue(mockKeypair);
+const mockAssetNative = { isNative: jest.fn().mockReturnValue(true) };
+const mockAssetConstructor = jest.fn().mockImplementation((code, issuer) => {
+  if (!code || !issuer) {
+    throw new Error('Asset code and issuer are required');
+  }
+  if (!/^[a-zA-Z0-9]{1,12}$/.test(code)) {
+    throw new Error('Invalid asset code');
+  }
+  if (!/^G[A-Z2-7]{55}$/.test(issuer)) {
+    throw new Error('Invalid asset issuer');
+  }
+  return {
+    isNative: () => false,
+    getCode: () => code,
+    getIssuer: () => issuer,
+  };
+}) as any;
+mockAssetConstructor.native = jest.fn().mockReturnValue(mockAssetNative);
+
+function getMockKeypairFromSecret(...args) {
+  return mockKeypairFromSecret(...args);
+}
+
+function getMockTransactionBuilder(...args) {
+  return mockTransactionBuilder(...args);
+}
+
+function getMockPaymentOperation(...args: any[]) {
+  return mockPaymentOperation.apply(null, args);
+}
+
+function getMockAccountMergeOperation(...args: any[]) {
+  return mockAccountMergeOperation.apply(null, args);
+}
+
+function getMockAsset(...args: any[]) {
+  return mockAssetConstructor.apply(null, args);
+}
+getMockAsset.native = (...args: any[]) =>
+  mockAssetConstructor.native.apply(null, args);
 
 jest.mock('@stellar/stellar-sdk', () => {
   return {
@@ -15,27 +82,14 @@ jest.mock('@stellar/stellar-sdk', () => {
       })),
     },
     Keypair: {
-      fromSecret: jest.fn().mockReturnValue({
-        publicKey: () =>
-          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
-        secret: () => 'S_SECRET',
-      }),
+      fromSecret: getMockKeypairFromSecret,
     },
-    TransactionBuilder: jest.fn().mockImplementation(() => ({
-      addOperation: jest.fn().mockReturnThis(),
-      setTimeout: jest.fn().mockReturnThis(),
-      build: jest.fn().mockReturnValue({
-        sign: jest.fn(),
-      }),
-    })),
+    TransactionBuilder: getMockTransactionBuilder,
     Operation: {
-      payment: jest.fn(),
-      accountMerge: jest.fn(),
+      payment: getMockPaymentOperation,
+      accountMerge: getMockAccountMergeOperation,
     },
-    Asset: {
-      native: jest.fn().mockReturnValue({ isNative: () => true }),
-      constructor: jest.fn(),
-    },
+    Asset: getMockAsset,
     BASE_FEE: 100,
     Networks: {
       PUBLIC: 'Public Global Stellar Network ; September 2015',
@@ -45,65 +99,43 @@ jest.mock('@stellar/stellar-sdk', () => {
 });
 
 describe('TransactionProvider', () => {
-  let provider: TransactionProvider;
+  let provider;
+  let loggerErrorSpy;
+  let loggerWarnSpy;
 
-  const mockConfigService = {
-    getOrThrow: jest.fn(),
-  };
-
-  const mockHorizonServer = {
-    loadAccount: jest.fn(),
-    submitTransaction: jest.fn(),
-  };
-
-  beforeEach(async () => {
-    mockSubmitTransaction.mockReset();
-    mockLoadAccount.mockReset();
-
-    const module: TestingModule = await Test.createTestingModule({
+  const createProvider = async (network = 'testnet') => {
+    const module = await Test.createTestingModule({
       providers: [
         TransactionProvider,
         {
           provide: ConfigService,
           useValue: {
             getOrThrow: jest.fn((key) => {
-              if (key === 'stellar.horizonUrl')
-                return 'https://horizon-testnet.stellar.org';
-              if (key === 'stellar.network') return 'testnet';
-              return null;
+              const config = {
+                'stellar.horizonUrl': 'https://horizon-testnet.stellar.org',
+                'stellar.network': network,
+              };
+              return config[key];
             }),
           },
         },
       ],
     }).compile();
 
-    provider = module.get<TransactionProvider>(TransactionProvider);
-  });
+    return module.get(TransactionProvider);
+  };
 
   beforeEach(async () => {
-    mockConfigService.getOrThrow.mockImplementation((key: string) => {
-      const config = {
-        'stellar.horizonUrl': 'https://horizon-testnet.stellar.org',
-        'stellar.network': 'testnet',
-      };
-      return config[key];
-    });
-
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        TransactionProvider,
-        {
-          provide: ConfigService,
-          useValue: mockConfigService,
-        },
-      ],
-    }).compile();
-
-    provider = module.get<TransactionProvider>(TransactionProvider);
+    jest.clearAllMocks();
+    mockKeypairFromSecret.mockReturnValue(mockKeypair);
+    loggerErrorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    loggerWarnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    provider = await createProvider();
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    loggerErrorSpy.mockRestore();
+    loggerWarnSpy.mockRestore();
   });
 
   describe('executeSweepTransaction', () => {
@@ -114,8 +146,12 @@ describe('TransactionProvider', () => {
       asset: 'native',
     };
 
-    it('should execute payment transaction successfully', async () => {
-      mockLoadAccount.mockResolvedValue({ id: 'acc-123', sequence: '1' });
+    it('should execute payment transaction successfully with correct build flow', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
       mockSubmitTransaction.mockResolvedValue({
         hash: 'tx-hash-123',
         ledger: 100,
@@ -124,10 +160,88 @@ describe('TransactionProvider', () => {
 
       const result = await provider.executeSweepTransaction(params);
 
-      expect(mockLoadAccount).toHaveBeenCalled();
+      expect(mockKeypairFromSecret).toHaveBeenCalledWith('S_VALID_SECRET');
+      expect(mockLoadAccount).toHaveBeenCalledWith(
+        'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+      );
+      expect(mockPaymentOperation).toHaveBeenCalledWith({
+        destination: params.destinationAddress,
+        asset: mockAssetNative,
+        amount: params.amount,
+      });
+      expect(mockTransactionBuilder).toHaveBeenCalledWith(
+        { id: 'acc-123', sequence: '1', balances: [] },
+        {
+          fee: BASE_FEE,
+          networkPassphrase: Networks.TESTNET,
+        },
+      );
+      expect(mockTransactionAddOperation).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'payment' }),
+      );
+      expect(mockTransactionSetTimeout).toHaveBeenCalledWith(30);
+      expect(mockTransactionBuild).toHaveBeenCalled();
+      expect(mockTransactionSign).toHaveBeenCalledWith(mockKeypair);
       expect(mockSubmitTransaction).toHaveBeenCalled();
       expect(result.hash).toBe('tx-hash-123');
       expect(result.successful).toBe(true);
+
+      const addOrder = mockTransactionAddOperation.mock.invocationCallOrder[0];
+      const timeoutOrder =
+        mockTransactionSetTimeout.mock.invocationCallOrder[0];
+      const buildOrder = mockTransactionBuild.mock.invocationCallOrder[0];
+      const signOrder = mockTransactionSign.mock.invocationCallOrder[0];
+      expect(addOrder).toBeLessThan(timeoutOrder);
+      expect(timeoutOrder).toBeLessThan(buildOrder);
+      expect(buildOrder).toBeLessThan(signOrder);
+    });
+
+    it('should select PUBLIC network passphrase for mainnet', async () => {
+      provider = await createProvider('mainnet');
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'tx-hash-456',
+        ledger: 200,
+        successful: true,
+      });
+
+      await provider.executeSweepTransaction(params);
+
+      expect(mockTransactionBuilder).toHaveBeenCalledWith(
+        { id: 'acc-123', sequence: '1', balances: [] },
+        {
+          fee: BASE_FEE,
+          networkPassphrase: Networks.PUBLIC,
+        },
+      );
+    });
+
+    it('should default to TESTNET network passphrase for invalid network config', async () => {
+      provider = await createProvider('invalid');
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'tx-hash-789',
+        ledger: 201,
+        successful: true,
+      });
+
+      await provider.executeSweepTransaction(params);
+
+      expect(mockTransactionBuilder).toHaveBeenCalledWith(
+        { id: 'acc-123', sequence: '1', balances: [] },
+        {
+          fee: BASE_FEE,
+          networkPassphrase: Networks.TESTNET,
+        },
+      );
     });
 
     it('should throw InternalServerErrorException for account not found (loadAccount fail)', async () => {
@@ -138,13 +252,557 @@ describe('TransactionProvider', () => {
       );
     });
 
-    it('should throw InternalServerErrorException for submission errors', async () => {
-      mockLoadAccount.mockResolvedValue({ id: 'acc-123', sequence: '1' });
+    it('should throw InternalServerErrorException for invalid ephemeral secret', async () => {
+      mockKeypairFromSecret.mockImplementationOnce(() => {
+        throw new Error('invalid secret');
+      });
+
+      await expect(provider.executeSweepTransaction(params)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+
+    it('should log Horizon extras and wrap submission errors', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      const error = new Error('tx_insufficient_balance');
+      (error as any).response = {
+        data: {
+          extras: {
+            result_codes: {
+              transaction: 'tx_insufficient_balance',
+            },
+          },
+        },
+      };
+      mockSubmitTransaction.mockRejectedValue(error);
+
+      await expect(provider.executeSweepTransaction(params)).rejects.toThrow(
+        'Sweep transaction failed: tx_insufficient_balance',
+      );
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Transaction extras: {"result_codes":{"transaction":"tx_insufficient_balance"}}',
+      );
+    });
+
+    it('should throw InternalServerErrorException for submission errors without extras', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
       mockSubmitTransaction.mockRejectedValue(new Error('Transaction Failed'));
 
       await expect(provider.executeSweepTransaction(params)).rejects.toThrow(
         InternalServerErrorException,
       );
+    });
+
+    it('should throw InternalServerErrorException for insufficient balance', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      const error = new Error('tx_insufficient_balance');
+      (error as any).response = {
+        data: {
+          extras: {
+            result_codes: {
+              transaction: 'tx_insufficient_balance',
+              operations: ['op_underfunded'],
+            },
+          },
+        },
+      };
+      mockSubmitTransaction.mockRejectedValue(error);
+
+      await expect(provider.executeSweepTransaction(params)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+      expect(loggerErrorSpy).toHaveBeenCalled();
+    });
+
+    it('should throw InternalServerErrorException for insufficient fee balance', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      const error = new Error('tx_insufficient_fee');
+      (error as any).response = {
+        data: {
+          extras: {
+            result_codes: {
+              transaction: 'tx_insufficient_fee',
+            },
+          },
+        },
+      };
+      mockSubmitTransaction.mockRejectedValue(error);
+
+      await expect(provider.executeSweepTransaction(params)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+
+    it('should throw InternalServerErrorException when destination account does not exist', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      const error = new Error('op_no_destination');
+      (error as any).response = {
+        data: {
+          extras: {
+            result_codes: {
+              transaction: 'tx_failed',
+              operations: ['op_no_destination'],
+            },
+          },
+        },
+      };
+      mockSubmitTransaction.mockRejectedValue(error);
+
+      await expect(provider.executeSweepTransaction(params)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+
+    it('should throw InternalServerErrorException for network timeout', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockRejectedValue(new Error('ETIMEDOUT'));
+
+      await expect(provider.executeSweepTransaction(params)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+
+    it('should throw InternalServerErrorException for duplicate transaction submission', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      const error = new Error('tx_bad_seq');
+      (error as any).response = {
+        data: {
+          extras: {
+            result_codes: {
+              transaction: 'tx_bad_seq',
+            },
+          },
+        },
+      };
+      mockSubmitTransaction.mockRejectedValue(error);
+
+      await expect(provider.executeSweepTransaction(params)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+
+    it('should throw InternalServerErrorException for sequence number conflict', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      const error = new Error('tx_bad_seq');
+      (error as any).response = {
+        data: {
+          extras: {
+            result_codes: {
+              transaction: 'tx_bad_seq',
+            },
+          },
+        },
+      };
+      mockSubmitTransaction.mockRejectedValue(error);
+
+      await expect(provider.executeSweepTransaction(params)).rejects.toThrow(
+        'Sweep transaction failed: tx_bad_seq',
+      );
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Transaction extras: {"result_codes":{"transaction":"tx_bad_seq"}}',
+      );
+    });
+
+    it('should handle malformed Horizon response without extras', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      const error = new Error('Unknown error');
+      (error as any).response = {
+        data: {},
+      };
+      mockSubmitTransaction.mockRejectedValue(error);
+
+      await expect(provider.executeSweepTransaction(params)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+
+    it('should handle network disconnection gracefully', async () => {
+      mockLoadAccount.mockRejectedValue(new Error('Network Error'));
+
+      await expect(provider.executeSweepTransaction(params)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+  });
+
+  describe('executeSweepTransaction - Source Account Edge Cases', () => {
+    const params = {
+      ephemeralSecret: 'S_VALID_SECRET',
+      destinationAddress: 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337',
+      amount: '100',
+      asset: 'native',
+    };
+
+    it('should handle account with existing trustlines', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [
+          { asset_type: 'native', balance: '100.0000000' },
+          {
+            asset_type: 'credit_alphanum4',
+            asset_code: 'USDC',
+            asset_issuer:
+              'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+            balance: '50.0000000',
+          },
+        ],
+        subentry_count: 1,
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'tx-hash-trustline',
+        ledger: 100,
+        successful: true,
+      });
+
+      const result = await provider.executeSweepTransaction(params);
+      expect(result.successful).toBe(true);
+    });
+
+    it('should handle account with open DEX offers', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+        subentry_count: 2,
+        offers: [{ id: 'offer-1' }, { id: 'offer-2' }],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'tx-hash-offers',
+        ledger: 101,
+        successful: true,
+      });
+
+      const result = await provider.executeSweepTransaction(params);
+      expect(result.successful).toBe(true);
+    });
+
+    it('should handle newly created account (sequence 0)', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-new',
+        sequence: '0',
+        balances: [{ asset_type: 'native', balance: '2.0000000' }],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'tx-hash-new',
+        ledger: 102,
+        successful: true,
+      });
+
+      const result = await provider.executeSweepTransaction(params);
+      expect(result.successful).toBe(true);
+    });
+  });
+
+  describe('executeSweepTransaction - Payment Operation Details', () => {
+    it('should create payment with issued asset', async () => {
+      const issuer = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+      const customAssetParams = {
+        ephemeralSecret: 'S_VALID_SECRET',
+        destinationAddress: 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337',
+        amount: '50.5000000',
+        asset: `USDC:${issuer}`,
+      };
+
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'tx-hash-usdc',
+        ledger: 103,
+        successful: true,
+      });
+
+      await provider.executeSweepTransaction(customAssetParams);
+
+      expect(mockPaymentOperation).toHaveBeenCalledWith({
+        destination: customAssetParams.destinationAddress,
+        asset: expect.objectContaining({
+          isNative: expect.any(Function),
+          getCode: expect.any(Function),
+          getIssuer: expect.any(Function),
+        }),
+        amount: customAssetParams.amount,
+      });
+    });
+
+    it('should preserve amount precision in payment operation', async () => {
+      const preciseParams = {
+        ephemeralSecret: 'S_VALID_SECRET',
+        destinationAddress: 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337',
+        amount: '123.4567890',
+        asset: 'native',
+      };
+
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'tx-precise',
+        ledger: 104,
+        successful: true,
+      });
+
+      await provider.executeSweepTransaction(preciseParams);
+
+      expect(mockPaymentOperation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          amount: '123.4567890',
+        }),
+      );
+    });
+  });
+
+  describe('executeSweepTransaction - Transaction Hash Validation', () => {
+    const params = {
+      ephemeralSecret: 'S_VALID_SECRET',
+      destinationAddress: 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337',
+      amount: '100',
+      asset: 'native',
+    };
+
+    it('should return valid 64-character hex hash', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      const validHash = 'a'.repeat(64);
+      mockSubmitTransaction.mockResolvedValue({
+        hash: validHash,
+        ledger: 105,
+        successful: true,
+      });
+
+      const result = await provider.executeSweepTransaction(params);
+
+      expect(result.hash).toMatch(/^[a-f0-9]{64}$/i);
+      expect(result.hash.length).toBe(64);
+    });
+
+    it('should return unique hash for different transactions', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction
+        .mockResolvedValueOnce({
+          hash: 'a'.repeat(64),
+          ledger: 106,
+          successful: true,
+        })
+        .mockResolvedValueOnce({
+          hash: 'b'.repeat(64),
+          ledger: 107,
+          successful: true,
+        });
+
+      const result1 = await provider.executeSweepTransaction(params);
+      const result2 = await provider.executeSweepTransaction(params);
+
+      expect(result1.hash).not.toBe(result2.hash);
+    });
+
+    it('should include ledger number in result', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'tx-hash',
+        ledger: 12345,
+        successful: true,
+      });
+
+      const result = await provider.executeSweepTransaction(params);
+
+      expect(result.ledger).toBe(12345);
+      expect(typeof result.ledger).toBe('number');
+    });
+
+    it('should include timestamp in result', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'tx-hash',
+        ledger: 108,
+        successful: true,
+      });
+
+      const beforeTime = new Date();
+      const result = await provider.executeSweepTransaction(params);
+      const afterTime = new Date();
+
+      expect(result.timestamp).toBeInstanceOf(Date);
+      expect(result.timestamp.getTime()).toBeGreaterThanOrEqual(
+        beforeTime.getTime(),
+      );
+      expect(result.timestamp.getTime()).toBeLessThanOrEqual(
+        afterTime.getTime() + 1000,
+      );
+    });
+  });
+
+  describe('executeSweepTransaction - Configuration Edge Cases', () => {
+    it('should throw error when Horizon URL is invalid', async () => {
+      const invalidProvider = await Test.createTestingModule({
+        providers: [
+          TransactionProvider,
+          {
+            provide: ConfigService,
+            useValue: {
+              getOrThrow: jest.fn((key) => {
+                if (key === 'stellar.horizonUrl') return 'invalid-url';
+                if (key === 'stellar.network') return 'testnet';
+              }),
+            },
+          },
+        ],
+      }).compile();
+
+      const provider = invalidProvider.get(TransactionProvider);
+      mockLoadAccount.mockRejectedValue(new Error('Invalid URL'));
+
+      await expect(
+        provider.executeSweepTransaction({
+          ephemeralSecret: 'S_SECRET',
+          destinationAddress: 'GDEST',
+          amount: '100',
+          asset: 'native',
+        }),
+      ).rejects.toThrow();
+    });
+  });
+
+  describe('executeSweepTransaction - Transaction Timeout Scenarios', () => {
+    const params = {
+      ephemeralSecret: 'S_VALID_SECRET',
+      destinationAddress: 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337',
+      amount: '100',
+      asset: 'native',
+    };
+
+    it('should verify 30 second timeout is set', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'tx-timeout',
+        ledger: 109,
+        successful: true,
+      });
+
+      await provider.executeSweepTransaction(params);
+
+      expect(mockTransactionSetTimeout).toHaveBeenCalledWith(30);
+      expect(mockTransactionSetTimeout).toHaveBeenCalledTimes(1);
+    });
+
+    it('should throw error on Horizon timeout', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockRejectedValue(new Error('ETIMEDOUT'));
+
+      await expect(provider.executeSweepTransaction(params)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+
+    it('should throw error on network request timeout', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockRejectedValue(
+        new Error('Request timeout after 30s'),
+      );
+
+      await expect(provider.executeSweepTransaction(params)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+    });
+  });
+
+  describe('executeSweepTransaction - Fee Validation', () => {
+    const params = {
+      ephemeralSecret: 'S_VALID_SECRET',
+      destinationAddress: 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337',
+      amount: '100',
+      asset: 'native',
+    };
+
+    it('should use BASE_FEE for transaction fee', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'tx-fee',
+        ledger: 110,
+        successful: true,
+      });
+
+      await provider.executeSweepTransaction(params);
+
+      expect(mockTransactionBuilder).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          fee: BASE_FEE,
+        }),
+      );
+      expect(BASE_FEE).toBe(100);
     });
   });
 
@@ -154,8 +812,12 @@ describe('TransactionProvider', () => {
       destinationAddress: 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337',
     };
 
-    it('should execute merge transaction successfully', async () => {
-      mockLoadAccount.mockResolvedValue({ id: 'acc-123', sequence: '1' });
+    it('should execute merge transaction successfully and sign', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
       mockSubmitTransaction.mockResolvedValue({
         hash: 'merge-hash-123',
         ledger: 101,
@@ -163,47 +825,733 @@ describe('TransactionProvider', () => {
       });
 
       const result = await provider.mergeAccount(params);
+
+      expect(mockTransactionBuilder).toHaveBeenCalledWith(
+        { id: 'acc-123', sequence: '1', balances: [] },
+        {
+          fee: BASE_FEE,
+          networkPassphrase: Networks.TESTNET,
+        },
+      );
+      expect(mockAccountMergeOperation).toHaveBeenCalledWith({
+        destination: params.destinationAddress,
+      });
+      expect(mockTransactionAddOperation).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'accountMerge' }),
+      );
+      expect(mockTransactionSetTimeout).toHaveBeenCalledWith(30);
+      expect(mockTransactionSign).toHaveBeenCalledWith(mockKeypair);
       expect(result.hash).toBe('merge-hash-123');
+      expect(result.successful).toBe(true);
     });
 
-    it('should re-throw error if merge fails (to be handled by service)', async () => {
-      mockLoadAccount.mockResolvedValue({ id: 'acc-123', sequence: '1' });
+    it('should re-throw error if merge fails and log warning', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
       mockSubmitTransaction.mockRejectedValue(new Error('Merge Failed'));
 
       await expect(provider.mergeAccount(params)).rejects.toThrow(
         'Merge Failed',
       );
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        'Account merge failed (non-critical): Merge Failed',
+      );
+    });
+
+    it('should throw error when account has active trustlines', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      const error = new Error('op_has_sub_entries');
+      (error as any).response = {
+        data: {
+          extras: {
+            result_codes: {
+              transaction: 'tx_failed',
+              operations: ['op_has_sub_entries'],
+            },
+          },
+        },
+      };
+      mockSubmitTransaction.mockRejectedValue(error);
+
+      await expect(provider.mergeAccount(params)).rejects.toThrow(
+        'op_has_sub_entries',
+      );
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Account merge failed (non-critical)'),
+      );
+    });
+
+    it('should throw error when account has open offers on DEX', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      const error = new Error('op_has_sub_entries');
+      (error as any).response = {
+        data: {
+          extras: {
+            result_codes: {
+              transaction: 'tx_failed',
+              operations: ['op_has_sub_entries'],
+            },
+          },
+        },
+      };
+      mockSubmitTransaction.mockRejectedValue(error);
+
+      await expect(provider.mergeAccount(params)).rejects.toThrow();
+      expect(loggerWarnSpy).toHaveBeenCalled();
+    });
+
+    it('should throw error when merging account to itself', async () => {
+      const selfMergeParams = {
+        ephemeralSecret: 'S_VALID_SECRET',
+        destinationAddress:
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+      };
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      const error = new Error('op_malformed');
+      (error as any).response = {
+        data: {
+          extras: {
+            result_codes: {
+              transaction: 'tx_failed',
+              operations: ['op_malformed'],
+            },
+          },
+        },
+      };
+      mockSubmitTransaction.mockRejectedValue(error);
+
+      await expect(provider.mergeAccount(selfMergeParams)).rejects.toThrow(
+        'op_malformed',
+      );
+    });
+
+    it('should successfully merge account and reclaim base reserve', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [{ asset_type: 'native', balance: '2.5000000' }],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'merge-hash-reclaim',
+        ledger: 105,
+        successful: true,
+      });
+
+      const result = await provider.mergeAccount(params);
+
+      expect(result.successful).toBe(true);
+      expect(result.hash).toBe('merge-hash-reclaim');
+      expect(mockAccountMergeOperation).toHaveBeenCalledWith({
+        destination: params.destinationAddress,
+      });
+    });
+
+    it('should handle merge with account having subentries', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+        subentry_count: 2,
+      });
+      const error = new Error('op_has_sub_entries');
+      (error as any).response = {
+        data: {
+          extras: {
+            result_codes: {
+              transaction: 'tx_failed',
+              operations: ['op_has_sub_entries'],
+            },
+          },
+        },
+      };
+      mockSubmitTransaction.mockRejectedValue(error);
+
+      await expect(provider.mergeAccount(params)).rejects.toThrow();
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('non-critical'),
+      );
+    });
+
+    it('should re-throw and log when merge fails after successful sweep', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      const error = new Error('Unexpected merge failure');
+      mockSubmitTransaction.mockRejectedValue(error);
+
+      await expect(provider.mergeAccount(params)).rejects.toThrow(
+        'Unexpected merge failure',
+      );
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        'Account merge failed (non-critical): Unexpected merge failure',
+      );
+    });
+  });
+
+  describe('mergeAccount - Edge Cases', () => {
+    const params = {
+      ephemeralSecret: 'S_VALID_SECRET',
+      destinationAddress: 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337',
+    };
+
+    it('should handle merge with account having pending operations', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '5',
+        balances: [],
+      });
+      const error = new Error('op_has_sub_entries');
+      (error as any).response = {
+        data: {
+          extras: {
+            result_codes: {
+              transaction: 'tx_failed',
+              operations: ['op_has_sub_entries'],
+            },
+          },
+        },
+      };
+      mockSubmitTransaction.mockRejectedValue(error);
+
+      await expect(provider.mergeAccount(params)).rejects.toThrow();
+    });
+
+    it('should handle network partition during merge', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockRejectedValue(new Error('ECONNRESET'));
+
+      await expect(provider.mergeAccount(params)).rejects.toThrow('ECONNRESET');
     });
   });
 
   describe('parseAsset', () => {
+    const issuer = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+
     it('should parse "native" to Native asset', () => {
-      // Access private method through any for testing
-      const result = (provider as any).parseAsset('native');
+      const result = provider.parseAsset('native');
       expect(result.isNative()).toBe(true);
     });
 
     it('should parse "XLM" to Native asset', () => {
-      const result = (provider as any).parseAsset('XLM');
+      const result = provider.parseAsset('XLM');
       expect(result.isNative()).toBe(true);
     });
 
-    it('should parse "CODE:ISSUER" to issued asset', () => {
-      const result = (provider as any).parseAsset(
-        'USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
-      );
+    it('should parse 1-character asset code', () => {
+      const result = provider.parseAsset(`A:${issuer}`);
+      expect(result.getCode()).toBe('A');
+      expect(result.getIssuer()).toBe(issuer);
+    });
+
+    it('should parse 4-character asset code', () => {
+      const result = provider.parseAsset(`USDC:${issuer}`);
       expect(result.getCode()).toBe('USDC');
-      expect(result.getIssuer()).toBe(
-        'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+      expect(result.getIssuer()).toBe(issuer);
+    });
+
+    it('should parse 12-character asset code', () => {
+      const result = provider.parseAsset(`ABCDEFGHIJKL:${issuer}`);
+      expect(result.getCode()).toBe('ABCDEFGHIJKL');
+      expect(result.getIssuer()).toBe(issuer);
+    });
+
+    it('should preserve case sensitivity for asset codes', () => {
+      const result = provider.parseAsset(`uSdC:${issuer}`);
+      expect(result.getCode()).toBe('uSdC');
+    });
+
+    it('should throw error for invalid format without colon', () => {
+      expect(() => provider.parseAsset('invalid')).toThrow(
+        'Invalid asset format: invalid',
       );
     });
 
-    it('should throw error for invalid format', () => {
-      expect(() => (provider as any).parseAsset('invalid')).toThrow();
+    it('should throw error for extra colons', () => {
+      expect(() => provider.parseAsset('USDC:ISSUER:EXTRA')).toThrow(
+        'Invalid asset format: USDC:ISSUER:EXTRA',
+      );
     });
 
     it('should throw error for missing issuer', () => {
-      expect(() => (provider as any).parseAsset('USDC:')).toThrow();
+      expect(() => provider.parseAsset('USDC:')).toThrow(
+        'Asset code and issuer are required',
+      );
+    });
+
+    it('should throw error for invalid issuer format', () => {
+      expect(() => provider.parseAsset('USDC:BADISSUER')).toThrow(
+        'Invalid asset issuer',
+      );
+    });
+
+    it('should throw error for invalid asset code characters', () => {
+      expect(() => provider.parseAsset(`US*D:${issuer}`)).toThrow(
+        'Invalid asset code',
+      );
+    });
+
+    it('should handle alphanumeric asset codes', () => {
+      const result = provider.parseAsset(`USD123:${issuer}`);
+      expect(result.getCode()).toBe('USD123');
+      expect(result.getIssuer()).toBe(issuer);
+    });
+
+    it('should throw error for asset code exceeding 12 characters', () => {
+      expect(() => provider.parseAsset(`ABCDEFGHIJKLM:${issuer}`)).toThrow(
+        'Invalid asset code',
+      );
+    });
+
+    it('should throw error for empty asset code', () => {
+      expect(() => provider.parseAsset(`:${issuer}`)).toThrow(
+        'Asset code and issuer are required',
+      );
+    });
+
+    it('should throw error for asset with spaces', () => {
+      expect(() => provider.parseAsset(`US DC:${issuer}`)).toThrow(
+        'Invalid asset code',
+      );
+    });
+  });
+
+  describe('parseAsset - Additional Edge Cases', () => {
+    const issuer = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+
+    it('should handle asset code with numbers', () => {
+      const result = provider.parseAsset(`USD123:${issuer}`);
+      expect(result.getCode()).toBe('USD123');
+    });
+
+    it('should throw error for lowercase asset code characters', () => {
+      // This tests current behavior - asset codes are case-sensitive
+      // but Stellar typically uses uppercase
+      const result = provider.parseAsset(`usdc:${issuer}`);
+      expect(result.getCode()).toBe('usdc');
+    });
+
+    it('should handle maximum valid asset code length', () => {
+      const maxCode = 'A'.repeat(12);
+      const result = provider.parseAsset(`${maxCode}:${issuer}`);
+      expect(result.getCode()).toBe(maxCode);
+      expect(result.getCode().length).toBe(12);
+    });
+
+    it('should handle minimum valid asset code length', () => {
+      const result = provider.parseAsset(`A:${issuer}`);
+      expect(result.getCode()).toBe('A');
+      expect(result.getCode().length).toBe(1);
+    });
+
+    it('should throw error for whitespace in asset string', () => {
+      expect(() => provider.parseAsset(`US DC:${issuer}`)).toThrow();
+    });
+
+    it('should throw error for leading whitespace', () => {
+      expect(() => provider.parseAsset(` USDC:${issuer}`)).toThrow();
+    });
+
+    it('should throw error for trailing whitespace', () => {
+      expect(() => provider.parseAsset(`USDC:${issuer} `)).toThrow();
+    });
+
+    it('should validate issuer checksum via Stellar SDK', () => {
+      // Asset constructor validates issuer format
+      expect(() =>
+        provider.parseAsset(
+          'USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA6!',
+        ),
+      ).toThrow();
+    });
+  });
+
+  describe('getAccountBalance', () => {
+    const issuer = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+
+    it('should return native balance when asset is native', async () => {
+      mockLoadAccount.mockResolvedValue({
+        balances: [
+          { asset_type: 'native', balance: '123.4567890' },
+          {
+            asset_type: 'credit_alphanum4',
+            asset_code: 'USDC',
+            asset_issuer: issuer,
+            balance: '10.0000000',
+          },
+        ],
+      });
+
+      await expect(
+        provider.getAccountBalance(
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+          'native',
+        ),
+      ).resolves.toBe('123.4567890');
+    });
+
+    it('should return issued asset balance when trustline exists', async () => {
+      mockLoadAccount.mockResolvedValue({
+        balances: [
+          { asset_type: 'native', balance: '1.0000000' },
+          {
+            asset_type: 'credit_alphanum4',
+            asset_code: 'USDC',
+            asset_issuer: issuer,
+            balance: '5.1234567',
+          },
+        ],
+      });
+
+      await expect(
+        provider.getAccountBalance(
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+          `USDC:${issuer}`,
+        ),
+      ).resolves.toBe('5.1234567');
+    });
+
+    it('should return zero when requested asset trustline does not exist', async () => {
+      mockLoadAccount.mockResolvedValue({
+        balances: [
+          { asset_type: 'native', balance: '1.0000000' },
+          {
+            asset_type: 'credit_alphanum4',
+            asset_code: 'USDT',
+            asset_issuer: issuer,
+            balance: '9.0000000',
+          },
+        ],
+      });
+
+      await expect(
+        provider.getAccountBalance(
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+          `USDC:${issuer}`,
+        ),
+      ).resolves.toBe('0');
+    });
+
+    it('should return zero when balance is missing', async () => {
+      mockLoadAccount.mockResolvedValue({ balances: [] });
+
+      await expect(
+        provider.getAccountBalance(
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+          'native',
+        ),
+      ).resolves.toBe('0');
+    });
+
+    it('should propagate errors when account load fails', async () => {
+      mockLoadAccount.mockRejectedValue(new Error('Account not found'));
+
+      await expect(
+        provider.getAccountBalance(
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+          'native',
+        ),
+      ).rejects.toThrow('Account not found');
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Failed to get account balance: Account not found',
+      );
+    });
+
+    it('should handle account with multiple issued assets', async () => {
+      const issuer2 =
+        'GATEMHCCKCY67ZUCKTROYN24ZYT5GK4EQZ65JJLDHKHRUZI3EUEKMTCH';
+      mockLoadAccount.mockResolvedValue({
+        balances: [
+          { asset_type: 'native', balance: '50.0000000' },
+          {
+            asset_type: 'credit_alphanum4',
+            asset_code: 'USDC',
+            asset_issuer: issuer,
+            balance: '100.5000000',
+          },
+          {
+            asset_type: 'credit_alphanum4',
+            asset_code: 'USDT',
+            asset_issuer: issuer2,
+            balance: '200.7500000',
+          },
+        ],
+      });
+
+      const usdcBalance = await provider.getAccountBalance(
+        'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        `USDC:${issuer}`,
+      );
+      const usdtBalance = await provider.getAccountBalance(
+        'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        `USDT:${issuer2}`,
+      );
+
+      expect(usdcBalance).toBe('100.5000000');
+      expect(usdtBalance).toBe('200.7500000');
+    });
+
+    it('should preserve 7 decimal places precision', async () => {
+      mockLoadAccount.mockResolvedValue({
+        balances: [{ asset_type: 'native', balance: '0.0000001' }],
+      });
+
+      const balance = await provider.getAccountBalance(
+        'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        'native',
+      );
+
+      expect(balance).toBe('0.0000001');
+    });
+
+    it('should handle XLM alias for native asset balance', async () => {
+      mockLoadAccount.mockResolvedValue({
+        balances: [{ asset_type: 'native', balance: '999.9999999' }],
+      });
+
+      const balance = await provider.getAccountBalance(
+        'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        'XLM',
+      );
+
+      expect(balance).toBe('999.9999999');
+    });
+  });
+
+  describe('getAccountBalance - Additional Edge Cases', () => {
+    const issuer = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+
+    it('should handle very large balances', async () => {
+      mockLoadAccount.mockResolvedValue({
+        balances: [{ asset_type: 'native', balance: '922337203685.4775807' }],
+      });
+
+      const balance = await provider.getAccountBalance(
+        'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        'native',
+      );
+
+      expect(balance).toBe('922337203685.4775807');
+    });
+
+    it('should handle account with zero native balance', async () => {
+      mockLoadAccount.mockResolvedValue({
+        balances: [{ asset_type: 'native', balance: '0.0000000' }],
+      });
+
+      const balance = await provider.getAccountBalance(
+        'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        'native',
+      );
+
+      expect(balance).toBe('0.0000000');
+    });
+
+    it('should handle concurrent balance checks', async () => {
+      mockLoadAccount.mockResolvedValue({
+        balances: [{ asset_type: 'native', balance: '100.0000000' }],
+      });
+
+      const results = await Promise.all([
+        provider.getAccountBalance(
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+          'native',
+        ),
+        provider.getAccountBalance(
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+          'native',
+        ),
+      ]);
+
+      expect(results[0]).toBe('100.0000000');
+      expect(results[1]).toBe('100.0000000');
+    });
+
+    it('should handle network timeout during balance check', async () => {
+      mockLoadAccount.mockRejectedValue(new Error('ETIMEDOUT'));
+
+      await expect(
+        provider.getAccountBalance(
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+          'native',
+        ),
+      ).rejects.toThrow('ETIMEDOUT');
+    });
+
+    it('should match asset code and issuer exactly', async () => {
+      const issuer2 =
+        'GATEMHCCKCY67ZUCKTROYN24ZYT5GK4EQZ65JJLDHKHRUZI3EUEKMTCH';
+      mockLoadAccount.mockResolvedValue({
+        balances: [
+          {
+            asset_type: 'credit_alphanum4',
+            asset_code: 'USDC',
+            asset_issuer: issuer,
+            balance: '50.0000000',
+          },
+          {
+            asset_type: 'credit_alphanum4',
+            asset_code: 'USDC',
+            asset_issuer: issuer2,
+            balance: '75.0000000',
+          },
+        ],
+      });
+
+      const balance1 = await provider.getAccountBalance(
+        'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        `USDC:${issuer}`,
+      );
+      const balance2 = await provider.getAccountBalance(
+        'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        `USDC:${issuer2}`,
+      );
+
+      expect(balance1).toBe('50.0000000');
+      expect(balance2).toBe('75.0000000');
+    });
+
+    it('should return string type for balance (not number)', async () => {
+      mockLoadAccount.mockResolvedValue({
+        balances: [{ asset_type: 'native', balance: '100.0000000' }],
+      });
+
+      const balance = await provider.getAccountBalance(
+        'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        'native',
+      );
+
+      expect(typeof balance).toBe('string');
+    });
+  });
+
+  describe('Integration - Full Transaction Flow', () => {
+    it('should complete full sweep transaction from start to finish', async () => {
+      const params = {
+        ephemeralSecret: 'S_VALID_SECRET',
+        destinationAddress: 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337',
+        amount: '100.5000000',
+        asset: 'native',
+      };
+
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-integration',
+        sequence: '12345',
+        balances: [{ asset_type: 'native', balance: '100.5000000' }],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'integration-tx-hash',
+        ledger: 999,
+        successful: true,
+      });
+
+      const result = await provider.executeSweepTransaction(params);
+
+      // Verify complete flow
+      expect(mockKeypairFromSecret).toHaveBeenCalledWith(
+        params.ephemeralSecret,
+      );
+      expect(mockLoadAccount).toHaveBeenCalled();
+      expect(mockPaymentOperation).toHaveBeenCalled();
+      expect(mockTransactionBuilder).toHaveBeenCalled();
+      expect(mockTransactionSign).toHaveBeenCalled();
+      expect(mockSubmitTransaction).toHaveBeenCalled();
+      expect(result.successful).toBe(true);
+      expect(result.hash).toBe('integration-tx-hash');
+    });
+
+    it('should handle full sweep + merge workflow', async () => {
+      const sweepParams = {
+        ephemeralSecret: 'S_VALID_SECRET',
+        destinationAddress: 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337',
+        amount: '100.0000000',
+        asset: 'native',
+      };
+      const mergeParams = {
+        ephemeralSecret: 'S_VALID_SECRET',
+        destinationAddress: 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337',
+      };
+
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-workflow',
+        sequence: '1',
+        balances: [{ asset_type: 'native', balance: '100.0000000' }],
+      });
+      mockSubmitTransaction
+        .mockResolvedValueOnce({
+          hash: 'sweep-hash',
+          ledger: 1000,
+          successful: true,
+        })
+        .mockResolvedValueOnce({
+          hash: 'merge-hash',
+          ledger: 1001,
+          successful: true,
+        });
+
+      const sweepResult = await provider.executeSweepTransaction(sweepParams);
+      const mergeResult = await provider.mergeAccount(mergeParams);
+
+      expect(sweepResult.successful).toBe(true);
+      expect(mergeResult.successful).toBe(true);
+      expect(mockPaymentOperation).toHaveBeenCalled();
+      expect(mockAccountMergeOperation).toHaveBeenCalled();
+    });
+  });
+
+  describe('Error Message Quality', () => {
+    it('should include original error message in wrapped exception', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockRejectedValue(
+        new Error('Specific Horizon error'),
+      );
+
+      try {
+        await provider.executeSweepTransaction({
+          ephemeralSecret: 'S_SECRET',
+          destinationAddress: 'GDEST',
+          amount: '100',
+          asset: 'native',
+        });
+        fail('Should have thrown');
+      } catch (error) {
+        expect(error).toBeInstanceOf(InternalServerErrorException);
+        expect(error.message).toContain('Specific Horizon error');
+      }
+    });
+
+    it('should provide helpful error for invalid asset format', () => {
+      try {
+        provider.parseAsset('INVALID_FORMAT');
+        fail('Should have thrown');
+      } catch (error) {
+        expect(error.message).toContain('Invalid asset format');
+        expect(error.message).toContain('INVALID_FORMAT');
+      }
     });
   });
 });

@@ -86,6 +86,22 @@ npm run migration:run
 # Start development server
 npm run start:dev
 ```
+## Tests
+```bash
+npm test 
+
+## or to run specific tests
+npm test -- test_Service_File_Name
+
+##e.g 
+npm test -- sweeps.service.spec.ts
+```
+
+### Coverage
+e.g
+```bash
+npm test -- sweeps.service.spec.ts --coverage
+```
 
 ## Environment Variables
 
