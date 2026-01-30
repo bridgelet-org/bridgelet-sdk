@@ -97,10 +97,18 @@ export class ContractProvider {
 
       this.logger.log('Contract authorization successful');
 
+      // Generate cryptographically secure authorization hash
+      const timestamp = Date.now();
+      const authHash = this.generateAuthHash(
+        params.ephemeralPublicKey,
+        params.destinationAddress,
+        timestamp,
+      );
+
       return {
         authorized: true,
-        hash: 'contract-auth-hash', // Would be actual tx hash in production
-        timestamp: new Date(),
+        hash: authHash,
+        timestamp: new Date(timestamp),
       };
     } catch (error) {
       this.logger.error(
@@ -146,15 +154,23 @@ export class ContractProvider {
       version: '0.1.0',
     };
   }
-  private generateAuthHash(ephemeralKey: string, destination: string): string {
-    // Simple hash generation for demonstration
-    // In production, use proper cryptographic hashing
-    const combined = `${ephemeralKey}:${destination}:${Date.now()}`;
-    let hash = '';
-    for (let i = 0; i < 64; i++) {
-      const charCode = combined.charCodeAt(i % combined.length);
-      hash += ((charCode * (i + 1)) % 16).toString(16);
-    }
-    return hash;
+  /**
+   * Generate cryptographically secure authorization hash
+   * Uses Stellar SDK's SHA-256 hash function for security
+   *
+   * @param ephemeralKey - The ephemeral account public key
+   * @param destination - The destination address for the sweep
+   * @param timestamp - Optional timestamp for replay protection (defaults to current time)
+   * @returns 64-character hex string of the SHA-256 hash
+   */
+  public generateAuthHash(
+    ephemeralKey: string,
+    destination: string,
+    timestamp?: number,
+  ): string {
+    const ts = timestamp ?? Date.now();
+    const message = `${ephemeralKey}:${destination}:${ts}`;
+    const hashBuffer = hash(Buffer.from(message));
+    return hashBuffer.toString('hex');
   }
 }
