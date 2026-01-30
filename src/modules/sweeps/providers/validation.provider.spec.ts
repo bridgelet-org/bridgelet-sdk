@@ -1,14 +1,19 @@
+import { jest } from '@jest/globals';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ValidationProvider } from './validation.provider';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Account, AccountStatus } from '../../accounts/entities/account.entity';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Repository } from 'typeorm';
+import { Keypair } from '@stellar/stellar-sdk';
+
+const validPublicKey = Keypair.random().publicKey();
+const validDestination = Keypair.random().publicKey();
 
 const mockAccount = (overrides: Partial<Account> = {}): Account =>
   ({
     id: 'acc-123',
-    publicKey: 'GAB...',
+    publicKey: validPublicKey,
     ephemeralSecret: 'S...',
     status: AccountStatus.PENDING_CLAIM,
     expiresAt: new Date(Date.now() + 86400000),
@@ -39,9 +44,9 @@ describe('ValidationProvider', () => {
   describe('validateSweepParameters', () => {
     const validDto = {
       accountId: 'acc-123',
-      ephemeralPublicKey: 'GABC123',
+      ephemeralPublicKey: validPublicKey,
       ephemeralSecret: 'SABC123',
-      destinationAddress: 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337',
+      destinationAddress: validDestination,
       amount: '100',
       asset: 'native',
     };
@@ -54,26 +59,15 @@ describe('ValidationProvider', () => {
         }),
       );
 
-      const realValidG =
-        'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON';
-
-      const dto = { ...validDto, destinationAddress: realValidG };
-
       await expect(
-        provider.validateSweepParameters(dto),
+        provider.validateSweepParameters(validDto),
       ).resolves.not.toThrow();
     });
 
     it('should throw NotFoundException for non-existent account', async () => {
       jest.spyOn(repo, 'findOne').mockResolvedValue(null);
 
-      const dto = {
-        ...validDto,
-        destinationAddress:
-          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
-      };
-
-      await expect(provider.validateSweepParameters(dto)).rejects.toThrow(
+      await expect(provider.validateSweepParameters(validDto)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -82,13 +76,8 @@ describe('ValidationProvider', () => {
       jest
         .spyOn(repo, 'findOne')
         .mockResolvedValue(mockAccount({ status: AccountStatus.CLAIMED }));
-      const dto = {
-        ...validDto,
-        destinationAddress:
-          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
-      };
 
-      await expect(provider.validateSweepParameters(dto)).rejects.toThrow(
+      await expect(provider.validateSweepParameters(validDto)).rejects.toThrow(
         BadRequestException,
       );
     });
@@ -101,13 +90,8 @@ describe('ValidationProvider', () => {
           expiresAt: pastDate,
         }),
       );
-      const dto = {
-        ...validDto,
-        destinationAddress:
-          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
-      };
 
-      await expect(provider.validateSweepParameters(dto)).rejects.toThrow(
+      await expect(provider.validateSweepParameters(validDto)).rejects.toThrow(
         'Account has expired',
       );
     });
@@ -120,8 +104,7 @@ describe('ValidationProvider', () => {
         );
       const dto = {
         ...validDto,
-        destinationAddress:
-          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        destinationAddress: validDestination,
       };
 
       await expect(provider.validateSweepParameters(dto)).rejects.toThrow(
@@ -138,8 +121,7 @@ describe('ValidationProvider', () => {
       );
       const dto = {
         ...validDto,
-        destinationAddress:
-          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        destinationAddress: validDestination,
       };
 
       await expect(provider.validateSweepParameters(dto)).rejects.toThrow(
@@ -157,8 +139,7 @@ describe('ValidationProvider', () => {
       );
       const dto = {
         ...validDto,
-        destinationAddress:
-          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        destinationAddress: validDestination,
       };
 
       await expect(provider.validateSweepParameters(dto)).rejects.toThrow(
@@ -172,7 +153,7 @@ describe('ValidationProvider', () => {
       jest.spyOn(repo, 'findOne').mockResolvedValue(mockAccount());
       const result = await provider.canSweep(
         'acc-123',
-        'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        validDestination,
       );
       expect(result).toBe(true);
     });
@@ -181,7 +162,7 @@ describe('ValidationProvider', () => {
       jest.spyOn(repo, 'findOne').mockResolvedValue(null);
       const result = await provider.canSweep(
         'acc-123',
-        'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        validDestination,
       );
       expect(result).toBe(false);
     });
@@ -194,7 +175,7 @@ describe('ValidationProvider', () => {
       );
       const result = await provider.canSweep(
         'acc-123',
-        'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        validDestination,
       );
       expect(result).toBe(false);
     });
@@ -203,7 +184,7 @@ describe('ValidationProvider', () => {
       jest.spyOn(repo, 'findOne').mockRejectedValue(new Error('DB Error'));
       const result = await provider.canSweep(
         'acc-123',
-        'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        validDestination,
       );
       expect(result).toBe(false);
     });

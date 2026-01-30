@@ -9,7 +9,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import jwt from 'jsonwebtoken';
-import { TokenExpiredError, JsonWebTokenError } from 'jsonwebtoken';
 import * as crypto from 'crypto';
 import { Account } from '../../accounts/entities/account.entity.js';
 import { AccountStatus } from '../../accounts/entities/account.entity.js';
@@ -106,12 +105,19 @@ export class TokenVerificationProvider {
 
       return payload;
     } catch (error) {
-      if (error instanceof TokenExpiredError) {
+      const tokenExpiredError = (jwt as any).TokenExpiredError as
+        | (new (...args: unknown[]) => Error)
+        | undefined;
+      const jsonWebTokenError = (jwt as any).JsonWebTokenError as
+        | (new (...args: unknown[]) => Error)
+        | undefined;
+
+      if (tokenExpiredError && error instanceof tokenExpiredError) {
         this.logger.warn('Token has expired');
         throw new UnauthorizedException('Token has expired');
       }
 
-      if (error instanceof JsonWebTokenError) {
+      if (jsonWebTokenError && error instanceof jsonWebTokenError) {
         this.logger.warn('Invalid token signature');
         throw new UnauthorizedException('Invalid token signature');
       }

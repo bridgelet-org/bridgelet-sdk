@@ -71,7 +71,7 @@ export class TransactionProvider {
         )
         .setTimeout(30)
         .build();
-      Continue12: 46; // Sign with ephemeral account
+      // Sign with ephemeral account
       transaction.sign(sourceKeypair);
       // Submit transaction
       const result = await this.server.submitTransaction(transaction);

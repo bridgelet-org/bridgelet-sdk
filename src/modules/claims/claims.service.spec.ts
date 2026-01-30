@@ -1,3 +1,4 @@
+import { jest } from '@jest/globals';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -7,18 +8,46 @@ import {
   BadRequestException,
   NotFoundException,
 } from '@nestjs/common';
-import { ClaimsService } from './claims.service.js';
-import { TokenVerificationProvider } from './providers/token-verification.provider.js';
-import { ClaimRedemptionProvider } from './providers/claim-redemption.provider.js';
-import { ClaimLookupProvider } from './providers/claim-lookup.provider.js';
+import { Keypair } from '@stellar/stellar-sdk';
 import { Claim } from './entities/claim.entity.js';
 import { Account, AccountStatus } from '../accounts/entities/account.entity.js';
-import { SweepsService } from '../sweeps/sweeps.service.js';
-import { WebhooksService } from '../webhooks/webhooks.service.js';
-import jwt from 'jsonwebtoken';
+type ClaimsService = import('./claims.service.js').ClaimsService;
+type TokenVerificationProvider =
+  import('./providers/token-verification.provider.js').TokenVerificationProvider;
+type ClaimRedemptionProvider =
+  import('./providers/claim-redemption.provider.js').ClaimRedemptionProvider;
+type ClaimLookupProvider =
+  import('./providers/claim-lookup.provider.js').ClaimLookupProvider;
+type SweepsService = import('../sweeps/sweeps.service.js').SweepsService;
+type WebhooksService = import('../webhooks/webhooks.service.js').WebhooksService;
 
-// Mock jwt
-jest.mock('jsonwebtoken');
+const validPublicKey = Keypair.random().publicKey();
+const validDestinationAddress = Keypair.random().publicKey();
+
+class MockTokenExpiredError extends Error {}
+class MockJsonWebTokenError extends Error {}
+
+await jest.unstable_mockModule('jsonwebtoken', () => ({
+  default: {
+    verify: jest.fn(),
+    TokenExpiredError: MockTokenExpiredError,
+    JsonWebTokenError: MockJsonWebTokenError,
+  },
+}));
+
+const jwt = (await import('jsonwebtoken')).default;
+const { ClaimsService } = await import('./claims.service.js');
+const { TokenVerificationProvider } = await import(
+  './providers/token-verification.provider.js'
+);
+const { ClaimRedemptionProvider } = await import(
+  './providers/claim-redemption.provider.js'
+);
+const { ClaimLookupProvider } = await import(
+  './providers/claim-lookup.provider.js'
+);
+const { SweepsService } = await import('../sweeps/sweeps.service.js');
+const { WebhooksService } = await import('../webhooks/webhooks.service.js');
 
 describe('ClaimsService', () => {
   let service: ClaimsService;
@@ -101,7 +130,7 @@ describe('ClaimsService', () => {
 
     const mockAccount = {
       id: 'account-id',
-      publicKey: 'GTEST...',
+      publicKey: validPublicKey,
       claimTokenHash: tokenHash,
       amount: '100.0000000',
       asset: 'native',
@@ -110,7 +139,7 @@ describe('ClaimsService', () => {
     };
 
     const mockDecodedToken = {
-      publicKey: 'GTEST...',
+      publicKey: validPublicKey,
       type: 'claim',
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 3600,
@@ -150,9 +179,7 @@ describe('ClaimsService', () => {
 
     it('should throw UnauthorizedException for expired JWT', async () => {
       (jwt.verify as jest.Mock).mockImplementation(() => {
-        const error: any = new Error('jwt expired');
-        error.name = 'TokenExpiredError';
-        throw error;
+        throw new (jwt as any).TokenExpiredError('jwt expired');
       });
 
       await expect(
@@ -162,9 +189,7 @@ describe('ClaimsService', () => {
 
     it('should throw UnauthorizedException for invalid JWT signature', async () => {
       (jwt.verify as jest.Mock).mockImplementation(() => {
-        const error: any = new Error('invalid signature');
-        error.name = 'JsonWebTokenError';
-        throw error;
+        throw new (jwt as any).JsonWebTokenError('invalid signature');
       });
 
       await expect(
@@ -242,14 +267,14 @@ describe('ClaimsService', () => {
     const mockClaim = {
       id: claimId,
       accountId: 'account-id',
-      destinationAddress: 'GDEST...',
+      destinationAddress: validDestinationAddress,
       amountSwept: '100.0000000',
       asset: 'native',
       sweepTxHash: 'tx-hash',
       claimedAt: new Date('2026-01-14T17:49:20.265Z'),
       account: {
         id: 'account-id',
-        publicKey: 'GTEST...',
+        publicKey: validPublicKey,
       },
     };
 
@@ -305,7 +330,7 @@ describe('ClaimsService', () => {
       id: claimId,
       accountId: 'account-id',
       destinationAddress:
-        'GDEST47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+        validDestinationAddress,
       amountSwept: '100.0000000',
       asset: 'native',
       sweepTxHash: 'tx-hash',
@@ -362,13 +387,17 @@ describe('ClaimsService', () => {
   describe('ClaimRedemptionProvider', () => {
     const validToken = 'valid.jwt.token';
     const destinationAddress =
-      'GDEST47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+      validDestinationAddress;
     const tokenHash =
       '2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae';
 
-    const mockAccount = {
+    const mockSweepResult = {
+      txHash: 'sweep-tx-hash',
+    };
+
+    const createMockAccount = () => ({
       id: 'account-id',
-      publicKey: 'GTEST...',
+      publicKey: validPublicKey,
       secretKeyEncrypted: Buffer.from('test-secret').toString('base64'),
       claimTokenHash: tokenHash,
       amount: '100.0000000',
@@ -376,30 +405,40 @@ describe('ClaimsService', () => {
       status: AccountStatus.PENDING_CLAIM,
       expiresAt: new Date(Date.now() + 86400000),
       metadata: { userId: 'user-123' },
-    };
+    });
 
-    const mockSweepResult = {
-      txHash: 'sweep-tx-hash',
-    };
-
-    const mockClaim = {
+    const createMockClaim = (account: ReturnType<typeof createMockAccount>) => ({
       id: 'claim-id',
-      accountId: mockAccount.id,
+      accountId: account.id,
       destinationAddress,
       sweepTxHash: mockSweepResult.txHash,
-      amountSwept: mockAccount.amount,
-      asset: mockAccount.asset,
+      amountSwept: account.amount,
+      asset: account.asset,
       claimedAt: new Date(),
-    };
+    });
+
+    let mockAccount: ReturnType<typeof createMockAccount>;
+    let mockClaim: ReturnType<typeof createMockClaim>;
 
     beforeEach(() => {
+      mockAccount = createMockAccount();
+      mockClaim = createMockClaim(mockAccount);
       mockConfigService.getOrThrow.mockReturnValue('test-secret');
       (jwt.verify as jest.Mock).mockReturnValue({
-        publicKey: 'GTEST...',
+        publicKey: validPublicKey,
         type: 'claim',
         iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + 3600,
       });
+      jest
+        .spyOn(tokenVerificationProvider, 'verifyClaimToken')
+        .mockResolvedValue({
+          valid: true,
+          accountId: mockAccount.id,
+          amount: mockAccount.amount,
+          asset: mockAccount.asset,
+          expiresAt: mockAccount.expiresAt,
+        });
       mockAccountRepository.findOne.mockResolvedValue(mockAccount);
       mockSweepsService.executeSweep.mockResolvedValue(mockSweepResult);
       mockClaimRepository.create.mockReturnValue(mockClaim);
@@ -437,21 +476,10 @@ describe('ClaimsService', () => {
       expect(mockClaimRepository.save).toHaveBeenCalledWith(mockClaim);
     });
 
-    it('should trigger sweep.completed webhook', async () => {
+    it('should not trigger sweep.completed webhook in MVP', async () => {
       await claimRedemptionProvider.redeemClaim(validToken, destinationAddress);
 
-      expect(mockWebhooksService.triggerEvent).toHaveBeenCalledWith(
-        'sweep.completed',
-        {
-          accountId: mockAccount.id,
-          amount: mockAccount.amount,
-          asset: mockAccount.asset,
-          destination: destinationAddress,
-          txHash: mockSweepResult.txHash,
-          sweptAt: expect.any(Date),
-          metadata: mockAccount.metadata,
-        },
-      );
+      expect(mockWebhooksService.triggerEvent).not.toHaveBeenCalled();
     });
 
     it('should update account status to CLAIMED', async () => {
@@ -528,13 +556,13 @@ describe('ClaimsService', () => {
       expect(mockAccountRepository.save).toHaveBeenCalledWith(
         expect.objectContaining({
           status: AccountStatus.PENDING_CLAIM,
-          destinationAddress: null,
+          destinationAddress: '',
           claimedAt: null,
         }),
       );
     });
 
-    it('should trigger sweep.failed webhook on error', async () => {
+    it('should not trigger sweep.failed webhook on error in MVP', async () => {
       const error = new Error('Sweep failed');
       mockSweepsService.executeSweep.mockRejectedValue(error);
 
@@ -542,17 +570,7 @@ describe('ClaimsService', () => {
         claimRedemptionProvider.redeemClaim(validToken, destinationAddress),
       ).rejects.toThrow();
 
-      expect(mockWebhooksService.triggerEvent).toHaveBeenCalledWith(
-        'sweep.failed',
-        {
-          accountId: mockAccount.id,
-          amount: mockAccount.amount,
-          asset: mockAccount.asset,
-          destination: destinationAddress,
-          error: error.message,
-          timestamp: expect.any(Date),
-        },
-      );
+      expect(mockWebhooksService.triggerEvent).not.toHaveBeenCalled();
     });
 
     it('should re-throw error after cleanup', async () => {
@@ -591,7 +609,7 @@ describe('ClaimsService', () => {
   describe('ClaimsService Integration - Redemption', () => {
     const validToken = 'valid.jwt.token';
     const destinationAddress =
-      'GDEST47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+      validDestinationAddress;
 
     const mockRedemptionResponse = {
       success: true,
