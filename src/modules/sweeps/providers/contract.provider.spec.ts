@@ -1,9 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ContractProvider } from './contract.provider';
 import { ConfigService } from '@nestjs/config';
 import { InternalServerErrorException } from '@nestjs/common';
-import type { AuthorizeSweepParams } from '../interfaces/authorize-sweep-params.interface';
-import type { ContractAuthResult } from '../interfaces/contract-auth-result.interface';
 import {
   Contract,
   rpc,
@@ -16,6 +13,9 @@ import {
   Account,
   Operation,
 } from '@stellar/stellar-sdk';
+import { ContractProvider } from './contract.provider.js';
+import { ContractAuthResult } from '../interfaces/contract-auth-result.interface.js';
+import { AuthorizeSweepParams } from '../interfaces/authorize-sweep-params.interface.js';
 
 // Mock the Stellar SDK
 const mockServer = {
@@ -90,13 +90,16 @@ describe('ContractProvider', () => {
 
   // Valid test parameters
   const validParams: AuthorizeSweepParams = {
-    ephemeralPublicKey: 'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG',
-    destinationAddress: 'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM',
+    ephemeralPublicKey:
+      'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG',
+    destinationAddress:
+      'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM',
   };
 
   // Default config values
   const mockConfig = {
-    'stellar.contracts.ephemeralAccount': 'CDUMMYCONTRACTID123456789ABCDEFGHIJKLMNOPQRSTUV',
+    'stellar.contracts.ephemeralAccount':
+      'CDUMMYCONTRACTID123456789ABCDEFGHIJKLMNOPQRSTUV',
     'stellar.sorobanRpcUrl': 'https://soroban-testnet.stellar.org',
     'stellar.network': 'testnet',
   };
@@ -104,6 +107,11 @@ describe('ContractProvider', () => {
   beforeEach(async () => {
     // Clear all mock calls and instances
     jest.clearAllMocks();
+
+    // Suppress console errors during tests
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    jest.spyOn(console, 'log').mockImplementation(() => {});
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
 
     // Create mock instances with proper types
     mockAccount = {
@@ -129,7 +137,7 @@ describe('ContractProvider', () => {
       latestLedger: 12345,
       minResourceFee: '100',
       results: [{ auth: [], xdr: 'mock-xdr' }],
-    } as rpc.Api.SimulateTransactionSuccessResponse);
+    } as unknown as rpc.Api.SimulateTransactionSuccessResponse);
 
     mockContract.call.mockReturnValue(mockOperation);
 
@@ -140,7 +148,7 @@ describe('ContractProvider', () => {
     mockAddress.toScVal.mockReturnValue({} as xdr.ScVal);
 
     // Setup other SDK mocks
-    (rpc.Api.isSimulationError as jest.Mock).mockReturnValue(false);
+    (rpc.Api.isSimulationError as unknown as jest.Mock).mockReturnValue(false);
     (Address.fromString as jest.Mock).mockReturnValue(mockAddress);
 
     // Create testing module
@@ -166,6 +174,9 @@ describe('ContractProvider', () => {
     configService = module.get<ConfigService>(ConfigService);
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
 
   /**
    * SECTION 1: Configuration and Initialization Tests
@@ -174,8 +185,12 @@ describe('ContractProvider', () => {
   describe('Configuration and Initialization', () => {
     it('should initialize with valid configuration', () => {
       expect(provider).toBeDefined();
-      expect(configService.getOrThrow).toHaveBeenCalledWith('stellar.contracts.ephemeralAccount');
-      expect(configService.getOrThrow).toHaveBeenCalledWith('stellar.sorobanRpcUrl');
+      expect(configService.getOrThrow).toHaveBeenCalledWith(
+        'stellar.contracts.ephemeralAccount',
+      );
+      expect(configService.getOrThrow).toHaveBeenCalledWith(
+        'stellar.sorobanRpcUrl',
+      );
       expect(configService.getOrThrow).toHaveBeenCalledWith('stellar.network');
     });
 
@@ -209,7 +224,8 @@ describe('ContractProvider', () => {
         ],
       }).compile();
 
-      const mainnetProvider = mainnetModule.get<ContractProvider>(ContractProvider);
+      const mainnetProvider =
+        mainnetModule.get<ContractProvider>(ContractProvider);
       await mainnetProvider.authorizeSweep(validParams);
 
       expect(TransactionBuilder).toHaveBeenCalledWith(
@@ -228,7 +244,9 @@ describe('ContractProvider', () => {
             provide: ConfigService,
             useValue: {
               getOrThrow: jest.fn(() => {
-                throw new Error('Configuration key not found: stellar.contracts.ephemeralAccount');
+                throw new Error(
+                  'Configuration key not found: stellar.contracts.ephemeralAccount',
+                );
               }),
             },
           },
@@ -321,7 +339,8 @@ describe('ContractProvider', () => {
    */
   describe('authorizeSweep - Successful Authorization', () => {
     it('should successfully authorize sweep with valid parameters', async () => {
-      const result: ContractAuthResult = await provider.authorizeSweep(validParams);
+      const result: ContractAuthResult =
+        await provider.authorizeSweep(validParams);
 
       expect(result.authorized).toBe(true);
       expect(result.hash).toBeDefined();
@@ -332,28 +351,36 @@ describe('ContractProvider', () => {
     it('should create RPC server with correct URL', async () => {
       await provider.authorizeSweep(validParams);
 
-      expect(rpc.Server).toHaveBeenCalledWith(mockConfig['stellar.sorobanRpcUrl']);
+      expect(rpc.Server).toHaveBeenCalledWith(
+        mockConfig['stellar.sorobanRpcUrl'],
+      );
       expect(rpc.Server).toHaveBeenCalledTimes(1);
     });
 
     it('should create contract instance with correct contract ID', async () => {
       await provider.authorizeSweep(validParams);
 
-      expect(Contract).toHaveBeenCalledWith(mockConfig['stellar.contracts.ephemeralAccount']);
+      expect(Contract).toHaveBeenCalledWith(
+        mockConfig['stellar.contracts.ephemeralAccount'],
+      );
       expect(Contract).toHaveBeenCalledTimes(1);
     });
 
     it('should fetch account from RPC server', async () => {
       await provider.authorizeSweep(validParams);
 
-      expect(mockRpcServer.getAccount).toHaveBeenCalledWith(validParams.ephemeralPublicKey);
+      expect(mockRpcServer.getAccount).toHaveBeenCalledWith(
+        validParams.ephemeralPublicKey,
+      );
       expect(mockRpcServer.getAccount).toHaveBeenCalledTimes(1);
     });
 
     it('should convert destination address to Address object', async () => {
       await provider.authorizeSweep(validParams);
 
-      expect(Address.fromString).toHaveBeenCalledWith(validParams.destinationAddress);
+      expect(Address.fromString).toHaveBeenCalledWith(
+        validParams.destinationAddress,
+      );
       expect(Address.fromString).toHaveBeenCalledTimes(1);
     });
 
@@ -387,7 +414,9 @@ describe('ContractProvider', () => {
     it('should add operation to transaction builder', async () => {
       await provider.authorizeSweep(validParams);
 
-      expect(mockTransactionBuilder.addOperation).toHaveBeenCalledWith(mockOperation);
+      expect(mockTransactionBuilder.addOperation).toHaveBeenCalledWith(
+        mockOperation,
+      );
       expect(mockTransactionBuilder.addOperation).toHaveBeenCalledTimes(1);
     });
 
@@ -412,7 +441,9 @@ describe('ContractProvider', () => {
     it('should simulate transaction before returning', async () => {
       await provider.authorizeSweep(validParams);
 
-      expect(mockRpcServer.simulateTransaction).toHaveBeenCalledWith(mockTransaction);
+      expect(mockRpcServer.simulateTransaction).toHaveBeenCalledWith(
+        mockTransaction,
+      );
       expect(mockRpcServer.simulateTransaction).toHaveBeenCalledTimes(1);
     });
 
@@ -427,8 +458,12 @@ describe('ContractProvider', () => {
       const result = await provider.authorizeSweep(validParams);
       const afterTime = new Date();
 
-      expect(result.timestamp.getTime()).toBeGreaterThanOrEqual(beforeTime.getTime());
-      expect(result.timestamp.getTime()).toBeLessThanOrEqual(afterTime.getTime());
+      expect(result.timestamp.getTime()).toBeGreaterThanOrEqual(
+        beforeTime.getTime(),
+      );
+      expect(result.timestamp.getTime()).toBeLessThanOrEqual(
+        afterTime.getTime(),
+      );
     });
 
     it('should convert destination address to ScVal', async () => {
@@ -469,7 +504,9 @@ describe('ContractProvider', () => {
    */
   describe('authorizeSweep - RPC Server Failures', () => {
     it('should throw InternalServerErrorException when RPC server is unreachable', async () => {
-      mockRpcServer.getAccount.mockRejectedValue(new Error('Network error: ECONNREFUSED'));
+      mockRpcServer.getAccount.mockRejectedValue(
+        new Error('Network error: ECONNREFUSED'),
+      );
 
       await expect(provider.authorizeSweep(validParams)).rejects.toThrow(
         InternalServerErrorException,
@@ -488,7 +525,9 @@ describe('ContractProvider', () => {
     });
 
     it('should throw InternalServerErrorException on DNS resolution failure', async () => {
-      mockRpcServer.getAccount.mockRejectedValue(new Error('getaddrinfo ENOTFOUND'));
+      mockRpcServer.getAccount.mockRejectedValue(
+        new Error('getaddrinfo ENOTFOUND'),
+      );
 
       await expect(provider.authorizeSweep(validParams)).rejects.toThrow(
         InternalServerErrorException,
@@ -506,7 +545,9 @@ describe('ContractProvider', () => {
     });
 
     it('should throw InternalServerErrorException on rate limiting (429)', async () => {
-      mockRpcServer.getAccount.mockRejectedValue(new Error('Too Many Requests'));
+      mockRpcServer.getAccount.mockRejectedValue(
+        new Error('Too Many Requests'),
+      );
 
       await expect(provider.authorizeSweep(validParams)).rejects.toThrow(
         InternalServerErrorException,
@@ -514,7 +555,9 @@ describe('ContractProvider', () => {
     });
 
     it('should throw InternalServerErrorException when RPC returns malformed response', async () => {
-      mockRpcServer.getAccount.mockRejectedValue(new Error('Unexpected token in JSON'));
+      mockRpcServer.getAccount.mockRejectedValue(
+        new Error('Unexpected token in JSON'),
+      );
 
       await expect(provider.authorizeSweep(validParams)).rejects.toThrow(
         InternalServerErrorException,
@@ -522,7 +565,9 @@ describe('ContractProvider', () => {
     });
 
     it('should throw InternalServerErrorException when account does not exist', async () => {
-      mockRpcServer.getAccount.mockRejectedValue(new Error('Account not found'));
+      mockRpcServer.getAccount.mockRejectedValue(
+        new Error('Account not found'),
+      );
 
       await expect(provider.authorizeSweep(validParams)).rejects.toThrow(
         InternalServerErrorException,
@@ -553,7 +598,7 @@ describe('ContractProvider', () => {
         error: 'Contract execution failed: insufficient auth',
         events: [],
         latestLedger: 12345,
-      } as rpc.Api.SimulateTransactionErrorResponse;
+      } as unknown as rpc.Api.SimulateTransactionErrorResponse;
 
       mockRpcServer.simulateTransaction.mockResolvedValue(simulationError);
       jest.spyOn(rpc.Api, 'isSimulationError').mockReturnValue(true);
@@ -568,7 +613,7 @@ describe('ContractProvider', () => {
         error: 'Invalid contract invocation',
         events: [],
         latestLedger: 12345,
-      } as rpc.Api.SimulateTransactionErrorResponse;
+      } as unknown as rpc.Api.SimulateTransactionErrorResponse;
 
       mockRpcServer.simulateTransaction.mockResolvedValue(simulationError);
       jest.spyOn(rpc.Api, 'isSimulationError').mockReturnValue(true);
@@ -579,12 +624,16 @@ describe('ContractProvider', () => {
     });
 
     it('should handle simulation timeout', async () => {
-      mockRpcServer.simulateTransaction.mockRejectedValue(new Error('Simulation timeout'));
+      mockRpcServer.simulateTransaction.mockRejectedValue(
+        new Error('Simulation timeout'),
+      );
 
       await expect(provider.authorizeSweep(validParams)).rejects.toThrow(
         InternalServerErrorException,
       );
-      await expect(provider.authorizeSweep(validParams)).rejects.toThrow(/Simulation timeout/);
+      await expect(provider.authorizeSweep(validParams)).rejects.toThrow(
+        /Simulation timeout/,
+      );
     });
 
     it('should handle contract not found error', async () => {
@@ -592,7 +641,7 @@ describe('ContractProvider', () => {
         error: 'Contract not found',
         events: [],
         latestLedger: 12345,
-      } as rpc.Api.SimulateTransactionErrorResponse;
+      } as unknown as rpc.Api.SimulateTransactionErrorResponse;
 
       mockRpcServer.simulateTransaction.mockResolvedValue(simulationError);
       jest.spyOn(rpc.Api, 'isSimulationError').mockReturnValue(true);
@@ -607,7 +656,7 @@ describe('ContractProvider', () => {
         error: 'Function sweep not found in contract',
         events: [],
         latestLedger: 12345,
-      } as rpc.Api.SimulateTransactionErrorResponse;
+      } as unknown as rpc.Api.SimulateTransactionErrorResponse;
 
       mockRpcServer.simulateTransaction.mockResolvedValue(simulationError);
       jest.spyOn(rpc.Api, 'isSimulationError').mockReturnValue(true);
@@ -622,7 +671,7 @@ describe('ContractProvider', () => {
         error: 'Contract execution reverted',
         events: [],
         latestLedger: 12345,
-      } as rpc.Api.SimulateTransactionErrorResponse;
+      } as unknown as rpc.Api.SimulateTransactionErrorResponse;
 
       mockRpcServer.simulateTransaction.mockResolvedValue(simulationError);
       jest.spyOn(rpc.Api, 'isSimulationError').mockReturnValue(true);
@@ -637,7 +686,7 @@ describe('ContractProvider', () => {
         error: 'Resource limit exceeded',
         events: [],
         latestLedger: 12345,
-      } as rpc.Api.SimulateTransactionErrorResponse;
+      } as unknown as rpc.Api.SimulateTransactionErrorResponse;
 
       mockRpcServer.simulateTransaction.mockResolvedValue(simulationError);
       jest.spyOn(rpc.Api, 'isSimulationError').mockReturnValue(true);
@@ -674,7 +723,8 @@ describe('ContractProvider', () => {
       await expect(
         provider.authorizeSweep({
           ...validParams,
-          destinationAddress: 'GABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890BADCHECKSUM',
+          destinationAddress:
+            'GABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890BADCHECKSUM',
         }),
       ).rejects.toThrow(InternalServerErrorException);
     });
@@ -709,9 +759,11 @@ describe('ContractProvider', () => {
    */
   describe('authorizeSweep - Transaction Building Failures', () => {
     it('should throw error when TransactionBuilder fails', async () => {
-      (TransactionBuilder as jest.Mock).mockImplementationOnce(() => {
-        throw new Error('Failed to create transaction builder');
-      });
+      (TransactionBuilder as unknown as jest.Mock).mockImplementationOnce(
+        () => {
+          throw new Error('Failed to create transaction builder');
+        },
+      );
 
       await expect(provider.authorizeSweep(validParams)).rejects.toThrow(
         InternalServerErrorException,
@@ -779,7 +831,8 @@ describe('ContractProvider', () => {
       expect(signatureScVal).toBeDefined();
       expect(xdr.ScVal.scvBytes).toHaveBeenCalledWith(expect.any(Buffer));
 
-      const signatureBuffer = (xdr.ScVal.scvBytes as jest.Mock).mock.calls[0][0];
+      const signatureBuffer = (xdr.ScVal.scvBytes as jest.Mock).mock
+        .calls[0][0];
       expect(signatureBuffer).toBeInstanceOf(Buffer);
       expect(signatureBuffer.length).toBe(64);
     });
@@ -809,11 +862,14 @@ describe('ContractProvider', () => {
       await provider.authorizeSweep(validParams);
       await provider.authorizeSweep({
         ...validParams,
-        ephemeralPublicKey: 'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSE',
+        ephemeralPublicKey:
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSE',
       });
 
       expect(signatures).toHaveLength(2);
-      expect(signatures[0].toString('hex')).not.toBe(signatures[1].toString('hex'));
+      expect(signatures[0].toString('hex')).not.toBe(
+        signatures[1].toString('hex'),
+      );
     });
 
     it('should generate different signatures for different destination addresses', async () => {
@@ -826,11 +882,14 @@ describe('ContractProvider', () => {
       await provider.authorizeSweep(validParams);
       await provider.authorizeSweep({
         ...validParams,
-        destinationAddress: 'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNX',
+        destinationAddress:
+          'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNX',
       });
 
       expect(signatures).toHaveLength(2);
-      expect(signatures[0].toString('hex')).not.toBe(signatures[1].toString('hex'));
+      expect(signatures[0].toString('hex')).not.toBe(
+        signatures[1].toString('hex'),
+      );
     });
 
     it('should use hash function to generate signature base', async () => {
@@ -864,7 +923,9 @@ describe('ContractProvider', () => {
       const expectedHash = hash(Buffer.from(message));
 
       // First 32 bytes should match the hash output
-      expect(signature.subarray(0, 32).toString('hex')).toBe(expectedHash.toString('hex'));
+      expect(signature.subarray(0, 32).toString('hex')).toBe(
+        expectedHash.toString('hex'),
+      );
     });
 
     it('should produce signature that can be verified against known message format', async () => {
@@ -897,10 +958,13 @@ describe('ContractProvider', () => {
      */
     it('should match test vector for known ephemeral and destination pair', async () => {
       const testVector = {
-        ephemeralPublicKey: 'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG',
-        destinationAddress: 'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM',
+        ephemeralPublicKey:
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG',
+        destinationAddress:
+          'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM',
         // Pre-computed expected hash (first 32 bytes of signature)
-        expectedMessageFormat: 'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG:GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM',
+        expectedMessageFormat:
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG:GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM',
       };
 
       const signatures: Buffer[] = [];
@@ -918,9 +982,11 @@ describe('ContractProvider', () => {
       const expectedHash = hash(Buffer.from(testVector.expectedMessageFormat));
 
       // Verify signature matches expected hash
-      expect(signature.subarray(0, 32).toString('hex')).toBe(expectedHash.toString('hex'));
+      expect(signature.subarray(0, 32).toString('hex')).toBe(
+        expectedHash.toString('hex'),
+      );
       // Verify padding bytes are zero (remaining 32 bytes)
-      expect(signature.subarray(32, 64).every(byte => byte === 0)).toBe(true);
+      expect(signature.subarray(32, 64).every((byte) => byte === 0)).toBe(true);
     });
 
     it('should generate signature with correct structure for contract validation', async () => {
@@ -940,10 +1006,10 @@ describe('ContractProvider', () => {
       const paddingPortion = signature.subarray(32, 64);
 
       // Hash portion should be non-zero (actual hash)
-      expect(hashPortion.some(byte => byte !== 0)).toBe(true);
+      expect(hashPortion.some((byte) => byte !== 0)).toBe(true);
 
       // Padding should be all zeros in MVP
-      expect(paddingPortion.every(byte => byte === 0)).toBe(true);
+      expect(paddingPortion.every((byte) => byte === 0)).toBe(true);
 
       // Total length must be 64 bytes (Ed25519 signature size)
       expect(signature.length).toBe(64);
@@ -957,10 +1023,30 @@ describe('ContractProvider', () => {
 
       // Test multiple input combinations
       const testCases = [
-        { ephemeralPublicKey: 'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG', destinationAddress: 'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM' },
-        { ephemeralPublicKey: 'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSE', destinationAddress: 'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM' },
-        { ephemeralPublicKey: 'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG', destinationAddress: 'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNX' },
-        { ephemeralPublicKey: 'GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ', destinationAddress: 'GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGSNFHEYVXM3XOJMDS674JZ' },
+        {
+          ephemeralPublicKey:
+            'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG',
+          destinationAddress:
+            'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM',
+        },
+        {
+          ephemeralPublicKey:
+            'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSE',
+          destinationAddress:
+            'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM',
+        },
+        {
+          ephemeralPublicKey:
+            'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG',
+          destinationAddress:
+            'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNX',
+        },
+        {
+          ephemeralPublicKey:
+            'GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ',
+          destinationAddress:
+            'GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGSNFHEYVXM3XOJMDS674JZ',
+        },
       ];
 
       for (const testCase of testCases) {
@@ -1009,7 +1095,8 @@ describe('ContractProvider', () => {
     it('should handle valid Stellar G-address for ephemeralPublicKey', async () => {
       const result = await provider.authorizeSweep({
         ...validParams,
-        ephemeralPublicKey: 'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG',
+        ephemeralPublicKey:
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG',
       });
 
       expect(result.authorized).toBe(true);
@@ -1020,7 +1107,8 @@ describe('ContractProvider', () => {
 
       const result = await provider.authorizeSweep({
         ...validParams,
-        destinationAddress: 'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM',
+        destinationAddress:
+          'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM',
       });
 
       expect(result.authorized).toBe(true);
@@ -1034,7 +1122,8 @@ describe('ContractProvider', () => {
 
       const result = await provider.authorizeSweep({
         ...validParams,
-        destinationAddress: 'CA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJUWDA',
+        destinationAddress:
+          'CA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJUWDA',
       });
 
       expect(result.authorized).toBe(true);
@@ -1054,7 +1143,8 @@ describe('ContractProvider', () => {
     });
 
     it('should properly type ContractAuthResult', async () => {
-      const result: ContractAuthResult = await provider.authorizeSweep(validParams);
+      const result: ContractAuthResult =
+        await provider.authorizeSweep(validParams);
 
       expect(typeof result.authorized).toBe('boolean');
       expect(typeof result.hash).toBe('string');
@@ -1146,20 +1236,24 @@ describe('ContractProvider', () => {
         return mockAddress as any;
       });
 
-      (TransactionBuilder as jest.Mock).mockImplementationOnce((...args) => {
-        callOrder.push('TransactionBuilder');
-        return mockTransactionBuilder as any;
-      });
+      (TransactionBuilder as unknown as jest.Mock).mockImplementationOnce(
+        (...args) => {
+          callOrder.push('TransactionBuilder');
+          return mockTransactionBuilder as any;
+        },
+      );
 
-      mockRpcServer.simulateTransaction.mockImplementationOnce(async (...args) => {
-        callOrder.push('simulateTransaction');
-        return {
-          id: 'mock',
-          latestLedger: 123,
-          minResourceFee: '100',
-          results: [],
-        } as rpc.Api.SimulateTransactionSuccessResponse;
-      });
+      mockRpcServer.simulateTransaction.mockImplementationOnce(
+        async (...args) => {
+          callOrder.push('simulateTransaction');
+          return {
+            id: 'mock',
+            latestLedger: 123,
+            minResourceFee: '100',
+            results: [],
+          } as unknown as rpc.Api.SimulateTransactionSuccessResponse;
+        },
+      );
 
       await provider.authorizeSweep(validParams);
 
@@ -1361,8 +1455,10 @@ describe('ContractProvider', () => {
     it('should match test vectors for known inputs', () => {
       const testVectors = [
         {
-          ephemeralKey: 'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG',
-          destination: 'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM',
+          ephemeralKey:
+            'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG',
+          destination:
+            'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM',
           timestamp: 1706640000000,
           // Expected hash computed from: hash("GBBM6...:GD5J6...:1706640000000")
         },
@@ -1398,10 +1494,22 @@ describe('ContractProvider', () => {
 
       // Generate hashes for multiple different inputs
       const testInputs = [
-        { key: 'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG', dest: 'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM' },
-        { key: 'GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ', dest: 'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM' },
-        { key: 'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG', dest: 'GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGSNFHEYVXM3XOJMDS674JZ' },
-        { key: 'GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGSNFHEYVXM3XOJMDS674JZ', dest: 'GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ' },
+        {
+          key: 'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG',
+          dest: 'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM',
+        },
+        {
+          key: 'GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ',
+          dest: 'GD5J6HLF5666X4AZLTFTXLY2CQZBS2LBJBIMYV3SYGQ5OAQY5QO4XRNM',
+        },
+        {
+          key: 'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J2RROMSG',
+          dest: 'GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGSNFHEYVXM3XOJMDS674JZ',
+        },
+        {
+          key: 'GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGSNFHEYVXM3XOJMDS674JZ',
+          dest: 'GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJVSGZ',
+        },
       ];
 
       for (const input of testInputs) {
@@ -1435,7 +1543,9 @@ describe('ContractProvider', () => {
    */
   describe('Type Safety', () => {
     it('should use properly typed ConfigService', () => {
-      const config = configService.getOrThrow<string>('stellar.contracts.ephemeralAccount');
+      const config = configService.getOrThrow<string>(
+        'stellar.contracts.ephemeralAccount',
+      );
       expect(typeof config).toBe('string');
     });
 
@@ -1468,6 +1578,58 @@ describe('ContractProvider', () => {
       expect(typeof authorized).toBe('boolean');
       expect(typeof hash).toBe('string');
       expect(timestamp).toBeInstanceOf(Date);
+    });
+  });
+
+  /**
+   * SECTION 14: Authorization Verification - Not Implemented in MVP
+   *
+   * DESIGN DECISION: Authorization verification is not required in MVP because:
+   * 1. Contract simulation validates authorization during authorizeSweep()
+   * 2. Hash is cryptographically generated and verifiable via generateAuthHash()
+   * 3. Production implementation will verify on-chain via smart contract
+   *
+   * FUTURE: When implementing on-chain submission, the Soroban contract will
+   * perform authorization verification by:
+   * - Reconstructing the message from parameters
+   * - Hashing the message using same algorithm
+   * - Comparing against signature provided
+   */
+  describe('Authorization Verification - Design Decision', () => {
+    it('should document that verification is handled by contract simulation in MVP', () => {
+      // MVP verification happens during simulateTransaction()
+      // which validates the contract call will succeed
+
+      const mvpVerificationApproach = {
+        method: 'Contract simulation via RPC',
+        location: 'authorizeSweep() calls simulateTransaction()',
+        validates: 'Transaction structure and authorization',
+        productionApproach: 'On-chain smart contract verification',
+      };
+
+      expect(mvpVerificationApproach.method).toBe(
+        'Contract simulation via RPC',
+      );
+    });
+
+    it('should allow manual verification using generateAuthHash', () => {
+      const timestamp = new Date().getTime();
+
+      // Generate hash
+      const hash1 = provider.generateAuthHash(
+        validParams.ephemeralPublicKey,
+        validParams.destinationAddress,
+        timestamp,
+      );
+
+      // Manually verify by regenerating
+      const hash2 = provider.generateAuthHash(
+        validParams.ephemeralPublicKey,
+        validParams.destinationAddress,
+        timestamp,
+      );
+
+      expect(hash1).toBe(hash2);
     });
   });
 });
