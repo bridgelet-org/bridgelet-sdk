@@ -1,4 +1,9 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  Logger,
+  ConflictException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
@@ -33,13 +38,40 @@ export class ClaimRedemptionProvider {
     this.logger.log(`Redeeming claim for destination: ${destinationAddress}`);
 
     // Verify token first
-    await this.tokenVerificationProvider.verifyClaimToken(token);
+    // In claim-redemption.provider.ts redeemClaim method:
+    const tokenHash = this.hashToken(token);
+    try {
+      await this.tokenVerificationProvider.verifyClaimToken(token);
+    } catch (error) {
+      if (error instanceof ConflictException) {
+        // Account already claimed - return existing claim
+        const claimedAccount = await this.accountsRepository.findOne({
+          where: { claimTokenHash: tokenHash },
+        });
+        if (claimedAccount) {
+          const existingClaim = await this.claimsRepository.findOne({
+            where: { accountId: claimedAccount.id },
+          });
+          if (existingClaim) {
+            return {
+              success: true,
+              txHash: existingClaim.sweepTxHash,
+              amountSwept: existingClaim.amountSwept,
+              asset: existingClaim.asset,
+              destination: existingClaim.destinationAddress,
+              sweptAt: existingClaim.claimedAt,
+              message: 'Claim was already redeemed',
+            };
+          }
+        }
+      }
+      throw error;
+    }
 
     // Validate destination address
     this.validateStellarAddress(destinationAddress);
 
     // Get account
-    const tokenHash = this.hashToken(token);
     const account = await this.accountsRepository.findOne({
       where: { claimTokenHash: tokenHash },
     });
@@ -131,9 +163,10 @@ export class ClaimRedemptionProvider {
       account.claimedAt = null;
       await this.accountsRepository.save(account);
 
+      const typedError = error as Error;
       this.logger.error(
-        `Claim redemption failed: ${error.message}`,
-        error.stack,
+        `Claim redemption failed: ${typedError.message}`,
+        typedError.stack,
       );
 
       // TEMPORARY: WebhooksService not yet implemented - webhook trigger commented out

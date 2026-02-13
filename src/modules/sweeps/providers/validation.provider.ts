@@ -164,7 +164,7 @@ export class ValidationProvider {
       if (!StrKey.isValidEd25519PublicKey(address)) {
         throw new BadRequestException(`Invalid Stellar address: ${address}`);
       }
-    } catch (error) {
+    } catch {
       throw new BadRequestException(`Invalid Stellar address: ${address}`);
     }
   }

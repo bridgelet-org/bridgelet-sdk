@@ -111,12 +111,13 @@ export class ContractProvider {
         timestamp: new Date(timestamp),
       };
     } catch (error) {
+      const typedError = error as Error;
       this.logger.error(
-        `Contract authorization failed: ${error.message}`,
-        error.stack,
+        `Contract execution failed: ${typedError.message}`,
+        typedError.stack,
       );
       throw new InternalServerErrorException(
-        `Contract authorization failed: ${error.message}`,
+        `Contract execution failed: ${typedError.message}`,
       );
     }
   }
@@ -145,10 +146,10 @@ export class ContractProvider {
   /**
    * Check contract status and version
    */
-  public async getContractInfo(): Promise<{
+  public getContractInfo(): {
     contractId: string;
     version: string;
-  }> {
+  } {
     return {
       contractId: this.contractId,
       version: '0.1.0',

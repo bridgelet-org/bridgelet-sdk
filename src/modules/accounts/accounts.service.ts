@@ -88,6 +88,10 @@ export class AccountsService {
     status,
     limit,
     offset,
+  }: {
+    status?: AccountStatus;
+    limit: number;
+    offset: number;
   }): Promise<{ accounts: AccountResponseDto[]; total: number }> {
     const query = this.accountsRepository.createQueryBuilder('account');
 
@@ -106,10 +110,10 @@ export class AccountsService {
   }
 
   private generateClaimToken(publicKey: string): string {
-    const secret =
-      this.configService.get<string>('app.jwtSecret') ?? 'fallback secret';
+    // const secret =
+    //   this.configService.get<string>('app.jwtSecret') ?? 'fallback secret';
     const expiry =
-      this.configService.get<number>('app.claimTokenExpiry') ?? '2592000';
+      this.configService.get<number>('app.claimTokenExpiry') ?? 2592000;
 
     return this.jwtService.sign(
       { publicKey, type: 'claim' },

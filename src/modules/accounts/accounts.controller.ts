@@ -17,6 +17,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import { AccountsService } from './accounts.service.js';
 import { CreateAccountDto } from './dto/create-account.dto.js';
 import { AccountResponseDto } from './dto/account-response.dto.js';
+import { AccountStatus } from './entities/account.entity.js';
 
 @ApiTags('accounts')
 @Controller('accounts')
@@ -55,7 +56,7 @@ export class AccountsController {
   @ApiOperation({ summary: 'List accounts' })
   @ApiResponse({ status: 200, description: 'List of accounts' })
   public async findAll(
-    @Query('status') status?: string,
+    @Query('status') status?: AccountStatus,
     @Query('limit') limit = 50,
     @Query('offset') offset = 0,
   ) {
