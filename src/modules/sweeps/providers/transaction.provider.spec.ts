@@ -4,26 +4,114 @@ import { InternalServerErrorException, Logger } from '@nestjs/common';
 import { BASE_FEE, Networks } from '@stellar/stellar-sdk';
 import { TransactionProvider } from './transaction.provider.js';
 
-const mockSubmitTransaction = jest.fn();
-const mockLoadAccount = jest.fn();
-const mockTransactionSign = jest.fn();
-const mockTransactionBuild = jest.fn(() => ({ sign: mockTransactionSign }));
-const mockTransactionSetTimeout = jest.fn().mockReturnThis();
-const mockTransactionAddOperation = jest.fn().mockReturnThis();
-const mockTransactionBuilder = jest.fn().mockImplementation(() => ({
-  addOperation: mockTransactionAddOperation,
-  setTimeout: mockTransactionSetTimeout,
-  build: mockTransactionBuild,
+// Define proper types for our mocks
+interface MockKeypair {
+  publicKey: () => string;
+  secret: () => string;
+}
+
+interface MockAsset {
+  isNative: () => boolean;
+  getCode?: () => string;
+  getIssuer?: () => string;
+}
+
+interface MockAccount {
+  id: string;
+  sequence: string;
+  balances: Array<{
+    asset_type: string;
+    asset_code?: string;
+    asset_issuer?: string;
+    balance: string;
+  }>;
+  subentry_count?: number;
+  offers?: Array<{ id: string }>;
+}
+
+interface MockTransactionResult {
+  hash: string;
+  ledger: number;
+  successful: boolean;
+}
+
+interface MockTransaction {
+  sign: jest.Mock;
+}
+
+interface MockTransactionBuilder {
+  loadAccount?: jest.Mock;
+  submitTransaction?: jest.Mock;
+  addOperation?: jest.Mock;
+  setTimeout?: jest.Mock;
+  build?: jest.Mock;
+}
+
+interface MockOperation {
+  type: string;
+  [key: string]: unknown;
+}
+
+interface MockHorizonError extends Error {
+  response?: {
+    data?: {
+      extras?: {
+        result_codes?: {
+          transaction?: string;
+          operations?: string[];
+        };
+      };
+    };
+  };
+}
+
+interface TransactionProviderWithPrivates {
+  parseAsset(assetString: string): MockAsset;
+}
+
+const mockSubmitTransaction = jest.fn<
+  Promise<MockTransactionResult>,
+  [unknown]
+>();
+const mockLoadAccount = jest.fn<Promise<MockAccount>, [string]>();
+const mockTransactionSign = jest.fn<void, [MockKeypair]>();
+const mockTransactionBuild = jest.fn<MockTransaction, []>(() => ({
+  sign: mockTransactionSign,
 }));
-const mockPaymentOperation = jest.fn((params) => ({
+const mockTransactionSetTimeout = jest
+  .fn<MockTransactionBuilder, [number]>()
+  .mockReturnThis();
+const mockTransactionAddOperation = jest
+  .fn<MockTransactionBuilder, [MockOperation]>()
+  .mockReturnThis();
+const mockTransactionBuilder = jest
+  .fn<
+    MockTransactionBuilder,
+    [MockAccount, { fee: string; networkPassphrase: string }]
+  >()
+  .mockImplementation(
+    (): MockTransactionBuilder => ({
+      addOperation: mockTransactionAddOperation,
+      setTimeout: mockTransactionSetTimeout,
+      build: mockTransactionBuild,
+    }),
+  );
+const mockPaymentOperation = jest.fn<
+  MockOperation,
+  [{ destination: string; asset: MockAsset; amount: string }]
+>((params) => ({
   type: 'payment',
   ...params,
 }));
-const mockAccountMergeOperation = jest.fn((params) => ({
+const mockAccountMergeOperation = jest.fn<
+  MockOperation,
+  [{ destination: string }]
+>((params) => ({
   type: 'accountMerge',
   ...params,
 }));
-const mockKeypair = {
+
+const mockKeypair: MockKeypair = {
   publicKey: jest
     .fn()
     .mockReturnValue(
@@ -31,55 +119,77 @@ const mockKeypair = {
     ),
   secret: jest.fn().mockReturnValue('S_SECRET'),
 };
-const mockKeypairFromSecret = jest.fn().mockReturnValue(mockKeypair);
-const mockAssetNative = { isNative: jest.fn().mockReturnValue(true) };
-const mockAssetConstructor = jest.fn().mockImplementation((code, issuer) => {
-  if (!code || !issuer) {
-    throw new Error('Asset code and issuer are required');
-  }
-  if (!/^[a-zA-Z0-9]{1,12}$/.test(code)) {
-    throw new Error('Invalid asset code');
-  }
-  if (!/^G[A-Z2-7]{55}$/.test(issuer)) {
-    throw new Error('Invalid asset issuer');
-  }
-  return {
-    isNative: () => false,
-    getCode: () => code,
-    getIssuer: () => issuer,
-  };
-}) as any;
-mockAssetConstructor.native = jest.fn().mockReturnValue(mockAssetNative);
 
-function getMockKeypairFromSecret(...args) {
+const mockKeypairFromSecret = jest
+  .fn<MockKeypair, [string]>()
+  .mockReturnValue(mockKeypair);
+const mockAssetNative: MockAsset = {
+  isNative: jest.fn().mockReturnValue(true),
+};
+const mockAssetConstructor = jest
+  .fn<MockAsset, [string, string]>()
+  .mockImplementation((code, issuer) => {
+    if (!code || !issuer) {
+      throw new Error('Asset code and issuer are required');
+    }
+    if (!/^[a-zA-Z0-9]{1,12}$/.test(code)) {
+      throw new Error('Invalid asset code');
+    }
+    if (!/^G[A-Z2-7]{55}$/.test(issuer)) {
+      throw new Error('Invalid asset issuer');
+    }
+    return {
+      isNative: () => false,
+      getCode: () => code,
+      getIssuer: () => issuer,
+    };
+  });
+
+// Add native property to constructor
+(
+  mockAssetConstructor as typeof mockAssetConstructor & { native: jest.Mock }
+).native = jest.fn<MockAsset, []>().mockReturnValue(mockAssetNative);
+
+function getMockKeypairFromSecret(...args: [string]): MockKeypair {
   return mockKeypairFromSecret(...args);
 }
 
-function getMockTransactionBuilder(...args) {
+function getMockTransactionBuilder(
+  ...args: [MockAccount, { fee: string; networkPassphrase: string }]
+): MockTransactionBuilder {
   return mockTransactionBuilder(...args);
 }
 
-function getMockPaymentOperation(...args: any[]) {
-  return mockPaymentOperation.apply(null, args);
+function getMockPaymentOperation(
+  ...args: [{ destination: string; asset: MockAsset; amount: string }]
+): MockOperation {
+  return mockPaymentOperation(...args);
 }
 
-function getMockAccountMergeOperation(...args: any[]) {
-  return mockAccountMergeOperation.apply(null, args);
+function getMockAccountMergeOperation(
+  ...args: [{ destination: string }]
+): MockOperation {
+  return mockAccountMergeOperation(...args);
 }
 
-function getMockAsset(...args: any[]) {
-  return mockAssetConstructor.apply(null, args);
+function getMockAsset(...args: [string, string]): MockAsset {
+  return mockAssetConstructor(...args);
 }
-getMockAsset.native = (...args: any[]) =>
-  mockAssetConstructor.native.apply(null, args);
+
+getMockAsset.native = (): MockAsset =>
+  (
+    mockAssetConstructor as typeof mockAssetConstructor & { native: jest.Mock }
+  ).native();
 
 jest.mock('@stellar/stellar-sdk', () => {
   return {
     Horizon: {
-      Server: jest.fn().mockImplementation(() => ({
-        loadAccount: mockLoadAccount,
-        submitTransaction: mockSubmitTransaction,
-      })),
+      Server: jest.fn().mockImplementation(
+        (): MockTransactionBuilder => ({
+          loadAccount: mockLoadAccount,
+          submitTransaction: mockSubmitTransaction,
+        }),
+      ),
     },
     Keypair: {
       fromSecret: getMockKeypairFromSecret,
@@ -99,19 +209,21 @@ jest.mock('@stellar/stellar-sdk', () => {
 });
 
 describe('TransactionProvider', () => {
-  let provider;
-  let loggerErrorSpy;
-  let loggerWarnSpy;
+  let provider: TransactionProvider;
+  let loggerErrorSpy: jest.SpyInstance;
+  let loggerWarnSpy: jest.SpyInstance;
 
-  const createProvider = async (network = 'testnet') => {
+  const createProvider = async (
+    network = 'testnet',
+  ): Promise<TransactionProvider> => {
     const module = await Test.createTestingModule({
       providers: [
         TransactionProvider,
         {
           provide: ConfigService,
           useValue: {
-            getOrThrow: jest.fn((key) => {
-              const config = {
+            getOrThrow: jest.fn((key: string) => {
+              const config: Record<string, string> = {
                 'stellar.horizonUrl': 'https://horizon-testnet.stellar.org',
                 'stellar.network': network,
               };
@@ -268,8 +380,8 @@ describe('TransactionProvider', () => {
         sequence: '1',
         balances: [],
       });
-      const error = new Error('tx_insufficient_balance');
-      (error as any).response = {
+      const error: MockHorizonError = new Error('tx_insufficient_balance');
+      error.response = {
         data: {
           extras: {
             result_codes: {
@@ -307,8 +419,8 @@ describe('TransactionProvider', () => {
         sequence: '1',
         balances: [],
       });
-      const error = new Error('tx_insufficient_balance');
-      (error as any).response = {
+      const error: MockHorizonError = new Error('tx_insufficient_balance');
+      error.response = {
         data: {
           extras: {
             result_codes: {
@@ -332,8 +444,8 @@ describe('TransactionProvider', () => {
         sequence: '1',
         balances: [],
       });
-      const error = new Error('tx_insufficient_fee');
-      (error as any).response = {
+      const error: MockHorizonError = new Error('tx_insufficient_fee');
+      error.response = {
         data: {
           extras: {
             result_codes: {
@@ -355,8 +467,8 @@ describe('TransactionProvider', () => {
         sequence: '1',
         balances: [],
       });
-      const error = new Error('op_no_destination');
-      (error as any).response = {
+      const error: MockHorizonError = new Error('op_no_destination');
+      error.response = {
         data: {
           extras: {
             result_codes: {
@@ -392,8 +504,8 @@ describe('TransactionProvider', () => {
         sequence: '1',
         balances: [],
       });
-      const error = new Error('tx_bad_seq');
-      (error as any).response = {
+      const error: MockHorizonError = new Error('tx_bad_seq');
+      error.response = {
         data: {
           extras: {
             result_codes: {
@@ -415,8 +527,8 @@ describe('TransactionProvider', () => {
         sequence: '1',
         balances: [],
       });
-      const error = new Error('tx_bad_seq');
-      (error as any).response = {
+      const error: MockHorizonError = new Error('tx_bad_seq');
+      error.response = {
         data: {
           extras: {
             result_codes: {
@@ -441,8 +553,8 @@ describe('TransactionProvider', () => {
         sequence: '1',
         balances: [],
       });
-      const error = new Error('Unknown error');
-      (error as any).response = {
+      const error: MockHorizonError = new Error('Unknown error');
+      error.response = {
         data: {},
       };
       mockSubmitTransaction.mockRejectedValue(error);
@@ -696,20 +808,21 @@ describe('TransactionProvider', () => {
           {
             provide: ConfigService,
             useValue: {
-              getOrThrow: jest.fn((key) => {
+              getOrThrow: jest.fn((key: string) => {
                 if (key === 'stellar.horizonUrl') return 'invalid-url';
                 if (key === 'stellar.network') return 'testnet';
+                return '';
               }),
             },
           },
         ],
       }).compile();
 
-      const provider = invalidProvider.get(TransactionProvider);
+      const testProvider = invalidProvider.get(TransactionProvider);
       mockLoadAccount.mockRejectedValue(new Error('Invalid URL'));
 
       await expect(
-        provider.executeSweepTransaction({
+        testProvider.executeSweepTransaction({
           ephemeralSecret: 'S_SECRET',
           destinationAddress: 'GDEST',
           amount: '100',
@@ -867,8 +980,8 @@ describe('TransactionProvider', () => {
         sequence: '1',
         balances: [],
       });
-      const error = new Error('op_has_sub_entries');
-      (error as any).response = {
+      const error: MockHorizonError = new Error('op_has_sub_entries');
+      error.response = {
         data: {
           extras: {
             result_codes: {
@@ -894,8 +1007,8 @@ describe('TransactionProvider', () => {
         sequence: '1',
         balances: [],
       });
-      const error = new Error('op_has_sub_entries');
-      (error as any).response = {
+      const error: MockHorizonError = new Error('op_has_sub_entries');
+      error.response = {
         data: {
           extras: {
             result_codes: {
@@ -922,8 +1035,8 @@ describe('TransactionProvider', () => {
         sequence: '1',
         balances: [],
       });
-      const error = new Error('op_malformed');
-      (error as any).response = {
+      const error: MockHorizonError = new Error('op_malformed');
+      error.response = {
         data: {
           extras: {
             result_codes: {
@@ -968,8 +1081,8 @@ describe('TransactionProvider', () => {
         balances: [],
         subentry_count: 2,
       });
-      const error = new Error('op_has_sub_entries');
-      (error as any).response = {
+      const error: MockHorizonError = new Error('op_has_sub_entries');
+      error.response = {
         data: {
           extras: {
             result_codes: {
@@ -1017,8 +1130,8 @@ describe('TransactionProvider', () => {
         sequence: '5',
         balances: [],
       });
-      const error = new Error('op_has_sub_entries');
-      (error as any).response = {
+      const error: MockHorizonError = new Error('op_has_sub_entries');
+      error.response = {
         data: {
           extras: {
             result_codes: {
@@ -1049,90 +1162,120 @@ describe('TransactionProvider', () => {
     const issuer = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
 
     it('should parse "native" to Native asset', () => {
-      const result = provider.parseAsset('native');
+      const result = (
+        provider as unknown as TransactionProviderWithPrivates
+      ).parseAsset('native');
       expect(result.isNative()).toBe(true);
     });
 
     it('should parse "XLM" to Native asset', () => {
-      const result = provider.parseAsset('XLM');
+      const result = (
+        provider as unknown as TransactionProviderWithPrivates
+      ).parseAsset('XLM');
       expect(result.isNative()).toBe(true);
     });
 
     it('should parse 1-character asset code', () => {
-      const result = provider.parseAsset(`A:${issuer}`);
-      expect(result.getCode()).toBe('A');
-      expect(result.getIssuer()).toBe(issuer);
+      const result = (
+        provider as unknown as TransactionProviderWithPrivates
+      ).parseAsset(`A:${issuer}`);
+      expect(result.getCode?.()).toBe('A');
+      expect(result.getIssuer?.()).toBe(issuer);
     });
 
     it('should parse 4-character asset code', () => {
-      const result = provider.parseAsset(`USDC:${issuer}`);
-      expect(result.getCode()).toBe('USDC');
-      expect(result.getIssuer()).toBe(issuer);
+      const result = (
+        provider as unknown as TransactionProviderWithPrivates
+      ).parseAsset(`USDC:${issuer}`);
+      expect(result.getCode?.()).toBe('USDC');
+      expect(result.getIssuer?.()).toBe(issuer);
     });
 
     it('should parse 12-character asset code', () => {
-      const result = provider.parseAsset(`ABCDEFGHIJKL:${issuer}`);
-      expect(result.getCode()).toBe('ABCDEFGHIJKL');
-      expect(result.getIssuer()).toBe(issuer);
+      const result = (
+        provider as unknown as TransactionProviderWithPrivates
+      ).parseAsset(`ABCDEFGHIJKL:${issuer}`);
+      expect(result.getCode?.()).toBe('ABCDEFGHIJKL');
+      expect(result.getIssuer?.()).toBe(issuer);
     });
 
     it('should preserve case sensitivity for asset codes', () => {
-      const result = provider.parseAsset(`uSdC:${issuer}`);
-      expect(result.getCode()).toBe('uSdC');
+      const result = (
+        provider as unknown as TransactionProviderWithPrivates
+      ).parseAsset(`uSdC:${issuer}`);
+      expect(result.getCode?.()).toBe('uSdC');
     });
 
     it('should throw error for invalid format without colon', () => {
-      expect(() => provider.parseAsset('invalid')).toThrow(
-        'Invalid asset format: invalid',
-      );
+      expect(() =>
+        (provider as unknown as TransactionProviderWithPrivates).parseAsset(
+          'invalid',
+        ),
+      ).toThrow('Invalid asset format: invalid');
     });
 
     it('should throw error for extra colons', () => {
-      expect(() => provider.parseAsset('USDC:ISSUER:EXTRA')).toThrow(
-        'Invalid asset format: USDC:ISSUER:EXTRA',
-      );
+      expect(() =>
+        (provider as unknown as TransactionProviderWithPrivates).parseAsset(
+          'USDC:ISSUER:EXTRA',
+        ),
+      ).toThrow('Invalid asset format: USDC:ISSUER:EXTRA');
     });
 
     it('should throw error for missing issuer', () => {
-      expect(() => provider.parseAsset('USDC:')).toThrow(
-        'Asset code and issuer are required',
-      );
+      expect(() =>
+        (provider as unknown as TransactionProviderWithPrivates).parseAsset(
+          'USDC:',
+        ),
+      ).toThrow('Asset code and issuer are required');
     });
 
     it('should throw error for invalid issuer format', () => {
-      expect(() => provider.parseAsset('USDC:BADISSUER')).toThrow(
-        'Invalid asset issuer',
-      );
+      expect(() =>
+        (provider as unknown as TransactionProviderWithPrivates).parseAsset(
+          'USDC:BADISSUER',
+        ),
+      ).toThrow('Invalid asset issuer');
     });
 
     it('should throw error for invalid asset code characters', () => {
-      expect(() => provider.parseAsset(`US*D:${issuer}`)).toThrow(
-        'Invalid asset code',
-      );
+      expect(() =>
+        (provider as unknown as TransactionProviderWithPrivates).parseAsset(
+          `US*D:${issuer}`,
+        ),
+      ).toThrow('Invalid asset code');
     });
 
     it('should handle alphanumeric asset codes', () => {
-      const result = provider.parseAsset(`USD123:${issuer}`);
-      expect(result.getCode()).toBe('USD123');
-      expect(result.getIssuer()).toBe(issuer);
+      const result = (
+        provider as unknown as TransactionProviderWithPrivates
+      ).parseAsset(`USD123:${issuer}`);
+      expect(result.getCode?.()).toBe('USD123');
+      expect(result.getIssuer?.()).toBe(issuer);
     });
 
     it('should throw error for asset code exceeding 12 characters', () => {
-      expect(() => provider.parseAsset(`ABCDEFGHIJKLM:${issuer}`)).toThrow(
-        'Invalid asset code',
-      );
+      expect(() =>
+        (provider as unknown as TransactionProviderWithPrivates).parseAsset(
+          `ABCDEFGHIJKLM:${issuer}`,
+        ),
+      ).toThrow('Invalid asset code');
     });
 
     it('should throw error for empty asset code', () => {
-      expect(() => provider.parseAsset(`:${issuer}`)).toThrow(
-        'Asset code and issuer are required',
-      );
+      expect(() =>
+        (provider as unknown as TransactionProviderWithPrivates).parseAsset(
+          `:${issuer}`,
+        ),
+      ).toThrow('Asset code and issuer are required');
     });
 
     it('should throw error for asset with spaces', () => {
-      expect(() => provider.parseAsset(`US DC:${issuer}`)).toThrow(
-        'Invalid asset code',
-      );
+      expect(() =>
+        (provider as unknown as TransactionProviderWithPrivates).parseAsset(
+          `US DC:${issuer}`,
+        ),
+      ).toThrow('Invalid asset code');
     });
   });
 
@@ -1140,46 +1283,66 @@ describe('TransactionProvider', () => {
     const issuer = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
 
     it('should handle asset code with numbers', () => {
-      const result = provider.parseAsset(`USD123:${issuer}`);
-      expect(result.getCode()).toBe('USD123');
+      const result = (
+        provider as unknown as TransactionProviderWithPrivates
+      ).parseAsset(`USD123:${issuer}`);
+      expect(result.getCode?.()).toBe('USD123');
     });
 
     it('should throw error for lowercase asset code characters', () => {
       // This tests current behavior - asset codes are case-sensitive
       // but Stellar typically uses uppercase
-      const result = provider.parseAsset(`usdc:${issuer}`);
-      expect(result.getCode()).toBe('usdc');
+      const result = (
+        provider as unknown as TransactionProviderWithPrivates
+      ).parseAsset(`usdc:${issuer}`);
+      expect(result.getCode?.()).toBe('usdc');
     });
 
     it('should handle maximum valid asset code length', () => {
       const maxCode = 'A'.repeat(12);
-      const result = provider.parseAsset(`${maxCode}:${issuer}`);
-      expect(result.getCode()).toBe(maxCode);
-      expect(result.getCode().length).toBe(12);
+      const result = (
+        provider as unknown as TransactionProviderWithPrivates
+      ).parseAsset(`${maxCode}:${issuer}`);
+      expect(result.getCode?.()).toBe(maxCode);
+      expect(result.getCode?.().length).toBe(12);
     });
 
     it('should handle minimum valid asset code length', () => {
-      const result = provider.parseAsset(`A:${issuer}`);
-      expect(result.getCode()).toBe('A');
-      expect(result.getCode().length).toBe(1);
+      const result = (
+        provider as unknown as TransactionProviderWithPrivates
+      ).parseAsset(`A:${issuer}`);
+      expect(result.getCode?.()).toBe('A');
+      expect(result.getCode?.().length).toBe(1);
     });
 
     it('should throw error for whitespace in asset string', () => {
-      expect(() => provider.parseAsset(`US DC:${issuer}`)).toThrow();
+      expect(() =>
+        (provider as unknown as TransactionProviderWithPrivates).parseAsset(
+          `US DC:${issuer}`,
+        ),
+      ).toThrow();
     });
 
     it('should throw error for leading whitespace', () => {
-      expect(() => provider.parseAsset(` USDC:${issuer}`)).toThrow();
+      expect(() =>
+        (provider as unknown as TransactionProviderWithPrivates).parseAsset(
+          ` USDC:${issuer}`,
+        ),
+      ).toThrow();
     });
 
     it('should throw error for trailing whitespace', () => {
-      expect(() => provider.parseAsset(`USDC:${issuer} `)).toThrow();
+      expect(() =>
+        (provider as unknown as TransactionProviderWithPrivates).parseAsset(
+          `USDC:${issuer} `,
+        ),
+      ).toThrow();
     });
 
     it('should validate issuer checksum via Stellar SDK', () => {
       // Asset constructor validates issuer format
       expect(() =>
-        provider.parseAsset(
+        (provider as unknown as TransactionProviderWithPrivates).parseAsset(
           'USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA6!',
         ),
       ).toThrow();
@@ -1200,6 +1363,8 @@ describe('TransactionProvider', () => {
             balance: '10.0000000',
           },
         ],
+        id: 'acc-123',
+        sequence: '1',
       });
 
       await expect(
@@ -1221,6 +1386,8 @@ describe('TransactionProvider', () => {
             balance: '5.1234567',
           },
         ],
+        id: 'acc-123',
+        sequence: '1',
       });
 
       await expect(
@@ -1242,6 +1409,8 @@ describe('TransactionProvider', () => {
             balance: '9.0000000',
           },
         ],
+        id: 'acc-123',
+        sequence: '1',
       });
 
       await expect(
@@ -1253,7 +1422,11 @@ describe('TransactionProvider', () => {
     });
 
     it('should return zero when balance is missing', async () => {
-      mockLoadAccount.mockResolvedValue({ balances: [] });
+      mockLoadAccount.mockResolvedValue({
+        balances: [],
+        id: 'acc-123',
+        sequence: '1',
+      });
 
       await expect(
         provider.getAccountBalance(
@@ -1296,6 +1469,8 @@ describe('TransactionProvider', () => {
             balance: '200.7500000',
           },
         ],
+        id: 'acc-123',
+        sequence: '1',
       });
 
       const usdcBalance = await provider.getAccountBalance(
@@ -1314,6 +1489,8 @@ describe('TransactionProvider', () => {
     it('should preserve 7 decimal places precision', async () => {
       mockLoadAccount.mockResolvedValue({
         balances: [{ asset_type: 'native', balance: '0.0000001' }],
+        id: 'acc-123',
+        sequence: '1',
       });
 
       const balance = await provider.getAccountBalance(
@@ -1327,6 +1504,8 @@ describe('TransactionProvider', () => {
     it('should handle XLM alias for native asset balance', async () => {
       mockLoadAccount.mockResolvedValue({
         balances: [{ asset_type: 'native', balance: '999.9999999' }],
+        id: 'acc-123',
+        sequence: '1',
       });
 
       const balance = await provider.getAccountBalance(
@@ -1344,6 +1523,8 @@ describe('TransactionProvider', () => {
     it('should handle very large balances', async () => {
       mockLoadAccount.mockResolvedValue({
         balances: [{ asset_type: 'native', balance: '922337203685.4775807' }],
+        id: 'acc-123',
+        sequence: '1',
       });
 
       const balance = await provider.getAccountBalance(
@@ -1357,6 +1538,8 @@ describe('TransactionProvider', () => {
     it('should handle account with zero native balance', async () => {
       mockLoadAccount.mockResolvedValue({
         balances: [{ asset_type: 'native', balance: '0.0000000' }],
+        id: 'acc-123',
+        sequence: '1',
       });
 
       const balance = await provider.getAccountBalance(
@@ -1370,6 +1553,8 @@ describe('TransactionProvider', () => {
     it('should handle concurrent balance checks', async () => {
       mockLoadAccount.mockResolvedValue({
         balances: [{ asset_type: 'native', balance: '100.0000000' }],
+        id: 'acc-123',
+        sequence: '1',
       });
 
       const results = await Promise.all([
@@ -1416,6 +1601,8 @@ describe('TransactionProvider', () => {
             balance: '75.0000000',
           },
         ],
+        id: 'acc-123',
+        sequence: '1',
       });
 
       const balance1 = await provider.getAccountBalance(
@@ -1434,6 +1621,8 @@ describe('TransactionProvider', () => {
     it('should return string type for balance (not number)', async () => {
       mockLoadAccount.mockResolvedValue({
         balances: [{ asset_type: 'native', balance: '100.0000000' }],
+        id: 'acc-123',
+        sequence: '1',
       });
 
       const balance = await provider.getAccountBalance(
@@ -1540,17 +1729,21 @@ describe('TransactionProvider', () => {
         fail('Should have thrown');
       } catch (error) {
         expect(error).toBeInstanceOf(InternalServerErrorException);
-        expect(error.message).toContain('Specific Horizon error');
+        const err = error as Error;
+        expect(err.message).toContain('Specific Horizon error');
       }
     });
 
     it('should provide helpful error for invalid asset format', () => {
       try {
-        provider.parseAsset('INVALID_FORMAT');
+        (provider as unknown as TransactionProviderWithPrivates).parseAsset(
+          'INVALID_FORMAT',
+        );
         fail('Should have thrown');
       } catch (error) {
-        expect(error.message).toContain('Invalid asset format');
-        expect(error.message).toContain('INVALID_FORMAT');
+        const err = error as Error;
+        expect(err.message).toContain('Invalid asset format');
+        expect(err.message).toContain('INVALID_FORMAT');
       }
     });
   });

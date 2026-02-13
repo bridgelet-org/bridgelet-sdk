@@ -17,6 +17,16 @@ import type { ExecuteTransactionParams } from '../interfaces/execute-transaction
 import type { TransactionResult } from '../interfaces/transaction-result.interface.js';
 import type { MergeAccountParams } from '../interfaces/merge-account-params.interface.js';
 
+interface HorizonErrorResponse {
+  response?: {
+    data?: {
+      extras?: unknown;
+    };
+  };
+  message: string;
+  stack?: string;
+}
+
 @Injectable()
 export class TransactionProvider {
   private readonly logger = new Logger(TransactionProvider.name);
@@ -71,8 +81,10 @@ export class TransactionProvider {
         )
         .setTimeout(30)
         .build();
-      Continue12: 46; // Sign with ephemeral account
+
+      // Sign with ephemeral account
       transaction.sign(sourceKeypair);
+
       // Submit transaction
       const result = await this.server.submitTransaction(transaction);
 
@@ -85,26 +97,27 @@ export class TransactionProvider {
         timestamp: new Date(),
       };
     } catch (error) {
+      const typedError = error as HorizonErrorResponse;
       this.logger.error(
-        `Sweep transaction failed: ${error.message}`,
-        error.stack,
+        `Sweep transaction failed: ${typedError.message}`,
+        typedError.stack,
       );
 
       // Extract more details from Horizon error
-      if (error.response?.data) {
-        const { extras } = error.response.data;
+      if (typedError.response?.data) {
+        const extras = typedError.response.data.extras;
         this.logger.error(`Transaction extras: ${JSON.stringify(extras)}`);
       }
 
       throw new InternalServerErrorException(
-        `Sweep transaction failed: ${error.message}`,
+        `Sweep transaction failed: ${typedError.message}`,
       );
     }
   }
-  /**
 
-Merge ephemeral account into destination to reclaim base reserve
-*/
+  /**
+   * Merge ephemeral account into destination to reclaim base reserve
+   */
   public async mergeAccount(
     params: MergeAccountParams,
   ): Promise<TransactionResult> {
@@ -151,15 +164,18 @@ Merge ephemeral account into destination to reclaim base reserve
     } catch (error) {
       // Account merge can fail if account still has offers or trustlines
       // This is non-critical as the main sweep was successful
-      this.logger.warn(`Account merge failed (non-critical): ${error.message}`);
+      const typedError = error as HorizonErrorResponse;
+      this.logger.warn(
+        `Account merge failed (non-critical): ${typedError.message}`,
+      );
 
       throw error; // Re-throw so caller can handle
     }
   }
-  /**
 
-Parse asset string into Stellar Asset object
-*/
+  /**
+   * Parse asset string into Stellar Asset object
+   */
   private parseAsset(assetString: string): Asset {
     if (assetString === 'native' || assetString === 'XLM') {
       return Asset.native();
@@ -174,10 +190,10 @@ Parse asset string into Stellar Asset object
     const [code, issuer] = parts;
     return new Asset(code, issuer);
   }
-  /**
 
-Get account balance for verification
-*/
+  /**
+   * Get account balance for verification
+   */
   public async getAccountBalance(
     publicKey: string,
     asset: string,
@@ -199,7 +215,8 @@ Get account balance for verification
       });
       return balance?.balance || '0';
     } catch (error) {
-      this.logger.error(`Failed to get account balance: ${error.message}`);
+      const typedError = error as HorizonErrorResponse;
+      this.logger.error(`Failed to get account balance: ${typedError.message}`);
       throw error;
     }
   }

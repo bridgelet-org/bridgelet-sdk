@@ -1,12 +1,15 @@
 ## Usage
 
 ### Execute a Sweep
+
 ```typescript
 const result = await sweepsService.executeSweep({
   accountId: '550e8400-e29b-41d4-a716-446655440000',
-  ephemeralPublicKey: 'GEPH47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+  ephemeralPublicKey:
+    'GEPH47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
   ephemeralSecret: 'SEPH47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
-  destinationAddress: 'GDEST47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+  destinationAddress:
+    'GDEST47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
   amount: '100.0000000',
   asset: 'native',
 });
@@ -23,11 +26,9 @@ const result = await sweepsService.executeSweep({
 ```
 
 ### Check if Account Can Be Swept
+
 ```typescript
-const canSweep = await sweepsService.canSweep(
-  accountId,
-  destinationAddress,
-);
+const canSweep = await sweepsService.canSweep(accountId, destinationAddress);
 
 if (canSweep) {
   // Proceed with sweep
@@ -35,6 +36,7 @@ if (canSweep) {
 ```
 
 ### Get Detailed Sweep Status
+
 ```typescript
 const status = await sweepsService.getSweepStatus(accountId);
 
@@ -49,11 +51,13 @@ const status = await sweepsService.getSweepStatus(accountId);
 ## Testing
 
 ### Run All Tests
+
 ```bash
 npm run test -- sweeps
 ```
 
 ### Run Specific Provider Tests
+
 ```bash
 npm run test -- validation.provider.spec
 npm run test -- contract.provider.spec
@@ -62,11 +66,13 @@ npm run test -- sweeps.service.spec
 ```
 
 ### Coverage
+
 ```bash
 npm run test:cov -- sweeps
 ```
 
 **Coverage Goals:**
+
 - Statements: >90%
 - Branches: >85%
 - Functions: >90%
@@ -76,7 +82,8 @@ npm run test:cov -- sweeps
 
 1. Create funded ephemeral account on testnet
 2. Execute sweep with valid parameters:
-```bash
+
+````bash
 curl -X POST http://localhost:3000/api/sweeps \
   -H "Content-Type: application/json" \
   -d '{
@@ -102,7 +109,7 @@ STELLAR_SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
 
 # Smart Contract
 EPHEMERAL_ACCOUNT_CONTRACT_ID=CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
-```
+````
 
 ### Network Selection
 
@@ -110,6 +117,7 @@ EPHEMERAL_ACCOUNT_CONTRACT_ID=CXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 - **Mainnet:** Production only (real money!)
 
 Network determines:
+
 - Horizon URL
 - Soroban RPC URL
 - Network passphrase
@@ -149,6 +157,7 @@ Network determines:
 ## Future Improvements
 
 ### Short Term
+
 1. **Production Signature Implementation:**
    - Replace dummy signatures with real Ed25519
    - Sign with authorized SDK private key
@@ -165,6 +174,7 @@ Network determines:
    - Validate minimum amounts
 
 ### Long Term
+
 1. **Batch Sweeps:**
    - Sweep multiple accounts in one transaction
    - Reduce transaction fees
@@ -190,20 +200,24 @@ Network determines:
 ### Common Issues
 
 **Transaction Fails with "op_underfunded":**
+
 - Ephemeral account has insufficient XLM for fee
 - Need minimum 0.5 XLM for transaction fees
 
 **Account Merge Fails:**
+
 - Check for active offers: `account.offers().call()`
 - Check for trustlines: `account.balances`
 - Remove before merging
 
 **Contract Simulation Fails:**
+
 - Verify contract ID is correct
 - Check Soroban RPC URL
 - Ensure contract is deployed on network
 
 **Address Validation Fails:**
+
 - Stellar addresses are 56 characters
 - Must start with 'G'
 - Use `StrKey.isValidEd25519PublicKey()`
@@ -211,11 +225,13 @@ Network determines:
 ### Debug Logging
 
 Enable debug logs:
+
 ```typescript
 Logger.overrideLogger(['log', 'debug', 'error', 'warn']);
 ```
 
 Check logs for:
+
 - Validation failures
 - Contract simulation errors
 - Transaction extras (Horizon errors)
@@ -224,6 +240,7 @@ Check logs for:
 ## Support
 
 For issues or questions:
+
 1. Check this README
 2. Review test files for examples
 3. Check Stellar documentation

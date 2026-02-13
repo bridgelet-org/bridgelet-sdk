@@ -37,7 +37,7 @@ export class TokenVerificationProvider {
 
     try {
       // Decode and verify JWT token
-      const payload = this.decodeClaimToken(token);
+      this.decodeClaimToken(token);
 
       // Hash the token to look up the associated account
       const tokenHash = this.hashToken(token);
@@ -58,7 +58,7 @@ export class TokenVerificationProvider {
       // Check if current time hasn't exceeded the account's expiry time
       if (new Date() > account.expiresAt) {
         this.logger.warn(
-          `Account ${account.id} has expired at ${account.expiresAt}`,
+          `Account ${account.id} has expired at ${account.expiresAt.toISOString()}`,
         );
         throw new UnauthorizedException('Claim token has expired');
       }
@@ -100,7 +100,7 @@ export class TokenVerificationProvider {
 
       // Verify token type is 'claim'
       if (payload.type !== 'claim') {
-        this.logger.warn(`Invalid token type: ${payload.type}`);
+        this.logger.warn(`Invalid token type: ${String(payload.type)}`);
         throw new UnauthorizedException('Invalid token type');
       }
 
@@ -143,7 +143,7 @@ export class TokenVerificationProvider {
         break;
 
       default:
-        this.logger.warn(`Unknown account status: ${account.status}`);
+        this.logger.warn(`Unknown account status: ${String(account.status)}`);
         throw new BadRequestException('Invalid account status');
     }
   }
