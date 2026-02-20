@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Keep checks in warning mode until this date, then enforce with failures.
-      ENFORCEMENT_START_DATE: "2026-02-27"
+      ENFORCEMENT_START_DATE: '2026-02-27'
       BRANCH_REGEX: '^(fix|feature|test|chore|docs)/issue-[0-9]+-[a-z0-9-]+$'
       TITLE_REGEX: '^(Fix|Feature|Test|Chore|Docs): .+ \(#[0-9]+\)$'
 
