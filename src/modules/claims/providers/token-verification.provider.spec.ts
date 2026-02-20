@@ -91,9 +91,9 @@ describe('TokenVerificationProvider', () => {
       mockConfigService.getOrThrow.mockReturnValue('test-secret');
       (jwt.verify as jest.Mock).mockReturnValue(mockDecodedToken);
       // Spy on the logger to verify error logging
-      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => { });
-      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => { });
-      jest.spyOn(Logger.prototype, 'log').mockImplementation(() => { });
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+      jest.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
     });
 
     it('should successfully verify valid token with eligible account', async () => {
