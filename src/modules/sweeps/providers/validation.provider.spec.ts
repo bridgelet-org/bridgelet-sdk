@@ -85,14 +85,12 @@ describe('ValidationProvider', () => {
     });
 
     it('should throw BadRequestException for CLAIMED status', async () => {
-      jest
-        .spyOn(repo, 'findOne')
-        .mockResolvedValue(
-          mockAccount({
-            status: AccountStatus.CLAIMED,
-            publicKey: validDto.ephemeralPublicKey,
-          }),
-        );
+      jest.spyOn(repo, 'findOne').mockResolvedValue(
+        mockAccount({
+          status: AccountStatus.CLAIMED,
+          publicKey: validDto.ephemeralPublicKey,
+        }),
+      );
       const dto = {
         ...validDto,
         destinationAddress:
@@ -125,14 +123,12 @@ describe('ValidationProvider', () => {
     });
 
     it('should throw BadRequestException for PENDING_PAYMENT status', async () => {
-      jest
-        .spyOn(repo, 'findOne')
-        .mockResolvedValue(
-          mockAccount({
-            status: AccountStatus.PENDING_PAYMENT,
-            publicKey: validDto.ephemeralPublicKey,
-          }),
-        );
+      jest.spyOn(repo, 'findOne').mockResolvedValue(
+        mockAccount({
+          status: AccountStatus.PENDING_PAYMENT,
+          publicKey: validDto.ephemeralPublicKey,
+        }),
+      );
       const dto = {
         ...validDto,
         destinationAddress:
