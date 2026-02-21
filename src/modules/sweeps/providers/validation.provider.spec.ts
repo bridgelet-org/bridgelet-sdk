@@ -242,10 +242,3 @@ describe('ValidationProvider', () => {
     });
   });
 });
-
-// This is a dummy test remove it after fix!!!
-// describe('ValidationProvider', () => {
-//   it('should be defined', () => {
-//     expect(true).toBe(true);
-//   });
-// });
