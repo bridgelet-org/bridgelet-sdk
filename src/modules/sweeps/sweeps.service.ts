@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ValidationProvider } from './providers/validation.provider.js';
 import { ContractProvider } from './providers/contract.provider.js';
-import type { ExecuteSweepDto } from './dto/execute-sweep.dto.js';
+import type { SweepExecutionRequest } from './dto/execute-sweep.command.js';
 import type { SweepResult } from './interfaces/sweep-result.interface.js';
 
 @Injectable()
@@ -16,16 +16,18 @@ export class SweepsService {
   /**
    * Execute sweep: transfer funds from ephemeral account to permanent wallet
    */
-  public async executeSweep(dto: ExecuteSweepDto): Promise<SweepResult> {
-    this.logger.log(`Executing sweep for account: ${dto.accountId}`);
+  public async executeSweep(
+    command: SweepExecutionRequest,
+  ): Promise<SweepResult> {
+    this.logger.log(`Executing sweep for account: ${command.accountId}`);
 
     // Step 1: Validate sweep parameters
-    await this.validationProvider.validateSweepParameters(dto);
+    await this.validationProvider.validateSweepParameters(command);
 
     // Step 2: Authorize sweep via contract
     const authResult = await this.contractProvider.authorizeSweep({
-      ephemeralPublicKey: dto.ephemeralPublicKey,
-      destinationAddress: dto.destinationAddress,
+      ephemeralPublicKey: command.ephemeralPublicKey,
+      destinationAddress: command.destinationAddress,
     });
 
     // TODO: Step 3 - Execute transaction (another issue)
@@ -36,8 +38,8 @@ export class SweepsService {
       success: true,
       txHash: 'pending',
       contractAuthHash: authResult.hash,
-      amountSwept: dto.amount,
-      destination: dto.destinationAddress,
+      amountSwept: command.amount,
+      destination: command.destinationAddress,
       timestamp: new Date(),
     };
   }
