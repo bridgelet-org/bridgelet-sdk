@@ -11,7 +11,7 @@ import {
   AccountStatus,
 } from '../../accounts/entities/account.entity.js';
 import { StrKey } from '@stellar/stellar-sdk';
-import type { ExecuteSweepDto } from '../dto/execute-sweep.dto.js';
+import type { SweepExecutionRequest } from '../interfaces/execute-sweep.interface.js';
 
 @Injectable()
 export class ValidationProvider {
@@ -25,25 +25,29 @@ export class ValidationProvider {
   /**
    * Validate all sweep parameters before execution
    */
-  public async validateSweepParameters(dto: ExecuteSweepDto): Promise<void> {
+  public async validateSweepParameters(
+    sweepExecutionRequest: SweepExecutionRequest,
+  ): Promise<void> {
     this.logger.log(
-      `Validating sweep parameters for account: ${dto.accountId}`,
+      `Validating sweep parameters for account: ${sweepExecutionRequest.accountId}`,
     );
 
     // Validate destination address format
-    this.validateStellarAddress(dto.destinationAddress);
+    this.validateStellarAddress(sweepExecutionRequest.destinationAddress);
 
     // Validate account exists and is in correct state
     const account = await this.accountRepository.findOne({
-      where: { id: dto.accountId },
+      where: { id: sweepExecutionRequest.accountId },
     });
 
     if (!account) {
-      throw new NotFoundException(`Account ${dto.accountId} not found`);
+      throw new NotFoundException(
+        `Account ${sweepExecutionRequest.accountId} not found`,
+      );
     }
 
     // Validate ephemeral public key matches
-    if (account.publicKey !== dto.ephemeralPublicKey) {
+    if (account.publicKey !== sweepExecutionRequest.ephemeralPublicKey) {
       throw new BadRequestException('Ephemeral public key mismatch');
     }
 
@@ -65,31 +69,33 @@ export class ValidationProvider {
     }
 
     // Validate amount is positive
-    const amount = parseFloat(dto.amount);
+    const amount = parseFloat(sweepExecutionRequest.amount);
     if (isNaN(amount) || amount <= 0) {
       throw new BadRequestException('Amount must be a positive number');
     }
 
     // Validate amount matches account balance
-    if (dto.amount !== account.amount) {
+    if (sweepExecutionRequest.amount !== account.amount) {
       throw new BadRequestException(
-        `Amount mismatch: expected ${account.amount}, got ${dto.amount}`,
+        `Amount mismatch: expected ${account.amount}, got ${sweepExecutionRequest.amount}`,
       );
     }
 
     // Validate asset format
-    if (!this.isValidAssetFormat(dto.asset)) {
+    if (!this.isValidAssetFormat(sweepExecutionRequest.asset)) {
       throw new BadRequestException('Invalid asset format');
     }
 
     // Validate asset matches
-    if (dto.asset !== account.asset) {
+    if (sweepExecutionRequest.asset !== account.asset) {
       throw new BadRequestException(
-        `Asset mismatch: expected ${account.asset}, got ${dto.asset}`,
+        `Asset mismatch: expected ${account.asset}, got ${sweepExecutionRequest.asset}`,
       );
     }
 
-    this.logger.log(`Validation passed for account: ${dto.accountId}`);
+    this.logger.log(
+      `Validation passed for account: ${sweepExecutionRequest.accountId}`,
+    );
   }
 
   /**

@@ -1,4 +1,4 @@
-export interface ExecuteSweepDto {
+export interface SweepExecutionRequest {
   accountId: string;
   ephemeralPublicKey: string;
   ephemeralSecret: string;
