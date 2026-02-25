@@ -11,7 +11,7 @@ import {
   AccountStatus,
 } from '../../accounts/entities/account.entity.js';
 import { StrKey } from '@stellar/stellar-sdk';
-import type { SweepExecutionRequest } from '../dto/execute-sweep.command.js';
+import type { SweepExecutionRequest } from '../interfaces/execute-sweep.interface.js';
 
 @Injectable()
 export class ValidationProvider {
@@ -41,7 +41,9 @@ export class ValidationProvider {
     });
 
     if (!account) {
-      throw new NotFoundException(`Account ${sweepExecutionRequest.accountId} not found`);
+      throw new NotFoundException(
+        `Account ${sweepExecutionRequest.accountId} not found`,
+      );
     }
 
     // Validate ephemeral public key matches
@@ -91,7 +93,9 @@ export class ValidationProvider {
       );
     }
 
-    this.logger.log(`Validation passed for account: ${sweepExecutionRequest.accountId}`);
+    this.logger.log(
+      `Validation passed for account: ${sweepExecutionRequest.accountId}`,
+    );
   }
 
   /**

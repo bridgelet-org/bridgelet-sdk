@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ValidationProvider } from './providers/validation.provider.js';
 import { ContractProvider } from './providers/contract.provider.js';
-import type { SweepExecutionRequest } from './dto/execute-sweep.command.js';
+import type { SweepExecutionRequest } from './interfaces/execute-sweep.interface.js';
 import type { SweepResult } from './interfaces/sweep-result.interface.js';
 
 @Injectable()
@@ -19,10 +19,14 @@ export class SweepsService {
   public async executeSweep(
     sweepExecutionRequest: SweepExecutionRequest,
   ): Promise<SweepResult> {
-    this.logger.log(`Executing sweep for account: ${sweepExecutionRequest.accountId}`);
+    this.logger.log(
+      `Executing sweep for account: ${sweepExecutionRequest.accountId}`,
+    );
 
     // Step 1: Validate sweep parameters
-    await this.validationProvider.validateSweepParameters(sweepExecutionRequest);
+    await this.validationProvider.validateSweepParameters(
+      sweepExecutionRequest,
+    );
 
     // Step 2: Authorize sweep via contract
     const authResult = await this.contractProvider.authorizeSweep({
