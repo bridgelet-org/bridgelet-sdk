@@ -227,7 +227,6 @@ Edit the PR title directly in GitHub:
 3. Update it to the required format.
 4. Save changes.
 
-
 ## Deployment
 
 See [Deployment Guide](./docs/deployment.md) for production setup.

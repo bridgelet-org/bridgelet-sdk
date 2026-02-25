@@ -91,6 +91,9 @@ Edit the PR title directly in GitHub:
 Before submitting your PR, ensure all checks pass:
 
 ```bash
+# Format check
+npm run format:check
+
 # Fix formatting (if needed)
 npm run format
 
