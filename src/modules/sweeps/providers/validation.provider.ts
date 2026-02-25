@@ -26,26 +26,26 @@ export class ValidationProvider {
    * Validate all sweep parameters before execution
    */
   public async validateSweepParameters(
-    command: SweepExecutionRequest,
+    sweepExecutionRequest: SweepExecutionRequest,
   ): Promise<void> {
     this.logger.log(
-      `Validating sweep parameters for account: ${command.accountId}`,
+      `Validating sweep parameters for account: ${sweepExecutionRequest.accountId}`,
     );
 
     // Validate destination address format
-    this.validateStellarAddress(command.destinationAddress);
+    this.validateStellarAddress(sweepExecutionRequest.destinationAddress);
 
     // Validate account exists and is in correct state
     const account = await this.accountRepository.findOne({
-      where: { id: command.accountId },
+      where: { id: sweepExecutionRequest.accountId },
     });
 
     if (!account) {
-      throw new NotFoundException(`Account ${command.accountId} not found`);
+      throw new NotFoundException(`Account ${sweepExecutionRequest.accountId} not found`);
     }
 
     // Validate ephemeral public key matches
-    if (account.publicKey !== command.ephemeralPublicKey) {
+    if (account.publicKey !== sweepExecutionRequest.ephemeralPublicKey) {
       throw new BadRequestException('Ephemeral public key mismatch');
     }
 
@@ -67,31 +67,31 @@ export class ValidationProvider {
     }
 
     // Validate amount is positive
-    const amount = parseFloat(command.amount);
+    const amount = parseFloat(sweepExecutionRequest.amount);
     if (isNaN(amount) || amount <= 0) {
       throw new BadRequestException('Amount must be a positive number');
     }
 
     // Validate amount matches account balance
-    if (command.amount !== account.amount) {
+    if (sweepExecutionRequest.amount !== account.amount) {
       throw new BadRequestException(
-        `Amount mismatch: expected ${account.amount}, got ${command.amount}`,
+        `Amount mismatch: expected ${account.amount}, got ${sweepExecutionRequest.amount}`,
       );
     }
 
     // Validate asset format
-    if (!this.isValidAssetFormat(command.asset)) {
+    if (!this.isValidAssetFormat(sweepExecutionRequest.asset)) {
       throw new BadRequestException('Invalid asset format');
     }
 
     // Validate asset matches
-    if (command.asset !== account.asset) {
+    if (sweepExecutionRequest.asset !== account.asset) {
       throw new BadRequestException(
-        `Asset mismatch: expected ${account.asset}, got ${command.asset}`,
+        `Asset mismatch: expected ${account.asset}, got ${sweepExecutionRequest.asset}`,
       );
     }
 
-    this.logger.log(`Validation passed for account: ${command.accountId}`);
+    this.logger.log(`Validation passed for account: ${sweepExecutionRequest.accountId}`);
   }
 
   /**

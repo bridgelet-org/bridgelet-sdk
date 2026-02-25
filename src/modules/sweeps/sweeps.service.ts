@@ -17,17 +17,17 @@ export class SweepsService {
    * Execute sweep: transfer funds from ephemeral account to permanent wallet
    */
   public async executeSweep(
-    command: SweepExecutionRequest,
+    sweepExecutionRequest: SweepExecutionRequest,
   ): Promise<SweepResult> {
-    this.logger.log(`Executing sweep for account: ${command.accountId}`);
+    this.logger.log(`Executing sweep for account: ${sweepExecutionRequest.accountId}`);
 
     // Step 1: Validate sweep parameters
-    await this.validationProvider.validateSweepParameters(command);
+    await this.validationProvider.validateSweepParameters(sweepExecutionRequest);
 
     // Step 2: Authorize sweep via contract
     const authResult = await this.contractProvider.authorizeSweep({
-      ephemeralPublicKey: command.ephemeralPublicKey,
-      destinationAddress: command.destinationAddress,
+      ephemeralPublicKey: sweepExecutionRequest.ephemeralPublicKey,
+      destinationAddress: sweepExecutionRequest.destinationAddress,
     });
 
     // TODO: Step 3 - Execute transaction (another issue)
@@ -38,8 +38,8 @@ export class SweepsService {
       success: true,
       txHash: 'pending',
       contractAuthHash: authResult.hash,
-      amountSwept: command.amount,
-      destination: command.destinationAddress,
+      amountSwept: sweepExecutionRequest.amount,
+      destination: sweepExecutionRequest.destinationAddress,
       timestamp: new Date(),
     };
   }
