@@ -91,11 +91,8 @@ Edit the PR title directly in GitHub:
 Before submitting your PR, ensure all checks pass:
 
 ```bash
-# Format check
-npx prettier --check .
-
 # Fix formatting (if needed)
-npx prettier --write .
+npm run format
 
 # Linting
 npm run lint
