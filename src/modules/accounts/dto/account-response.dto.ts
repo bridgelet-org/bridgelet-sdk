@@ -65,7 +65,7 @@ export class AccountResponseDto {
 
   @ApiProperty({
     description:
-      'Asset code for the funds in this account (e.g., XLM, USDC, EURT)',
+      'Asset code for the funds in this account (e.g., XLM, USDC)',
     example: 'XLM',
     maxLength: 100,
     readOnly: true,
