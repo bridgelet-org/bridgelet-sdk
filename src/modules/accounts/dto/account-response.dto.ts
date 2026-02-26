@@ -58,7 +58,7 @@ export class AccountResponseDto {
       'Amount of funds in the account, represented as a decimal string to preserve precision',
     example: '100.5000000',
     format: 'decimal',
-    pattern: '^d+\.d{7}$',
+    pattern: '^d+.d{7}$',
     readOnly: true,
   })
   amount: string;
