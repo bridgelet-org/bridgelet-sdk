@@ -1,267 +1,182 @@
-// import { Test, TestingModule } from '@nestjs/testing';
+import { Test, TestingModule } from '@nestjs/testing';
 
-// import { SweepsService } from './sweeps.service.js';
+import { SweepsService } from './sweeps.service.js';
 
-// import { ValidationProvider } from './providers/validation.provider.js';
+import { ValidationProvider } from './providers/validation.provider.js';
 
-// import { ContractProvider } from './providers/contract.provider.js';
+import { ContractProvider } from './providers/contract.provider.js';
 
-// import { TransactionProvider } from './providers/transaction.provider.js';
+describe('SweepsService', () => {
+  let service: SweepsService;
 
-// describe('SweepsService', () => {
-//   let service: SweepsService;
+  const mockValidationProvider = {
+    validateSweepParameters: jest.fn(),
 
-//   const mockValidationProvider = {
-//     validateSweepParameters: jest.fn(),
+    canSweep: jest.fn(),
 
-//     canSweep: jest.fn(),
+    getSweepStatus: jest.fn(),
+  };
 
-//     getSweepStatus: jest.fn(),
-//   };
+  const mockContractProvider = {
+    authorizeSweep: jest.fn(),
+  };
 
-//   const mockContractProvider = {
-//     authorizeSweep: jest.fn(),
-//   };
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        SweepsService,
 
-//   const mockTransactionProvider = {
-//     executeSweepTransaction: jest.fn(),
+        {
+          provide: ValidationProvider,
 
-//     mergeAccount: jest.fn(),
-//   };
+          useValue: mockValidationProvider,
+        },
 
-//   beforeEach(async () => {
-//     const module: TestingModule = await Test.createTestingModule({
-//       providers: [
-//         SweepsService,
+        {
+          provide: ContractProvider,
 
-//         {
-//           provide: ValidationProvider,
+          useValue: mockContractProvider,
+        },
+      ],
+    }).compile();
 
-//           useValue: mockValidationProvider,
-//         },
+    service = module.get<SweepsService>(SweepsService);
+  });
 
-//         {
-//           provide: ContractProvider,
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
 
-//           useValue: mockContractProvider,
-//         },
+  describe('executeSweep', () => {
+    const validDto = {
+      accountId: 'test-account-id',
 
-//         {
-//           provide: TransactionProvider,
+      ephemeralPublicKey:
+        'GEPH47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
 
-//           useValue: mockTransactionProvider,
-//         },
-//       ],
-//     }).compile();
+      ephemeralSecret:
+        'SEPH47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
 
-//     service = module.get<SweepsService>(SweepsService);
-//   });
+      destinationAddress:
+        'GDEST47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
 
-//   afterEach(() => {
-//     jest.clearAllMocks();
-//   });
+      amount: '100.0000000',
 
-//   describe('executeSweep', () => {
-//     const validDto = {
-//       accountId: 'test-account-id',
+      asset: 'native',
+    };
 
-//       ephemeralPublicKey:
-//         'GEPH47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+    const mockAuthResult = {
+      authorized: true,
 
-//       ephemeralSecret:
-//         'SEPH47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+      hash: 'auth-hash',
 
-//       destinationAddress:
-//         'GDEST47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+      timestamp: new Date(),
+    };
 
-//       amount: '100.0000000',
+    beforeEach(() => {
+      mockValidationProvider.validateSweepParameters.mockResolvedValue(
+        undefined,
+      );
 
-//       asset: 'native',
-//     };
+      mockContractProvider.authorizeSweep.mockResolvedValue(mockAuthResult);
+    });
 
-//     const mockAuthResult = {
-//       authorized: true,
+    it('should execute complete sweep workflow', async () => {
+      const result = await service.executeSweep(validDto);
 
-//       hash: 'auth-hash',
+      expect(result).toEqual({
+        success: true,
 
-//       timestamp: new Date(),
-//     };
+        txHash: 'pending',
 
-//     const mockTxResult = {
-//       hash: 'tx-hash',
+        contractAuthHash: mockAuthResult.hash,
 
-//       ledger: 12345,
+        amountSwept: validDto.amount,
 
-//       successful: true,
+        destination: validDto.destinationAddress,
 
-//       timestamp: new Date(),
-//     };
+        timestamp: expect.any(Date),
+      });
+    });
 
-//     beforeEach(() => {
-//       mockValidationProvider.validateSweepParameters.mockResolvedValue(
-//         undefined,
-//       );
+    it('should call validation provider first', async () => {
+      await service.executeSweep(validDto);
 
-//       mockContractProvider.authorizeSweep.mockResolvedValue(mockAuthResult);
+      expect(
+        mockValidationProvider.validateSweepParameters,
+      ).toHaveBeenCalledWith(validDto);
 
-//       mockTransactionProvider.executeSweepTransaction.mockResolvedValue(
-//         mockTxResult,
-//       );
+      expect(mockValidationProvider.validateSweepParameters).toHaveBeenCalled();
+      expect(mockContractProvider.authorizeSweep).toHaveBeenCalled();
 
-//       mockTransactionProvider.mergeAccount.mockResolvedValue(mockTxResult);
-//     });
+      const validationCallOrder =
+        mockValidationProvider.validateSweepParameters.mock
+          .invocationCallOrder[0];
+      const authCallOrder =
+        mockContractProvider.authorizeSweep.mock.invocationCallOrder[0];
+      expect(validationCallOrder).toBeLessThan(authCallOrder);
+    });
 
-//     it('should execute complete sweep workflow', async () => {
-//       const result = await service.executeSweep(validDto);
+    it('should call contract provider second', async () => {
+      await service.executeSweep(validDto);
 
-//       expect(result).toEqual({
-//         success: true,
+      expect(mockContractProvider.authorizeSweep).toHaveBeenCalledWith({
+        ephemeralPublicKey: validDto.ephemeralPublicKey,
 
-//         txHash: mockTxResult.hash,
+        destinationAddress: validDto.destinationAddress,
+      });
+    });
 
-//         contractAuthHash: mockAuthResult.hash,
+    it('should propagate validation errors', async () => {
+      mockValidationProvider.validateSweepParameters.mockRejectedValue(
+        new Error('Validation failed'),
+      );
 
-//         amountSwept: validDto.amount,
+      await expect(service.executeSweep(validDto)).rejects.toThrow(
+        'Validation failed',
+      );
+    });
 
-//         destination: validDto.destinationAddress,
+    it('should propagate contract errors', async () => {
+      mockContractProvider.authorizeSweep.mockRejectedValue(
+        new Error('Contract failed'),
+      );
 
-//         timestamp: expect.any(Date),
-//       });
-//     });
+      await expect(service.executeSweep(validDto)).rejects.toThrow(
+        'Contract failed',
+      );
+    });
+  });
 
-//     it('should call validation provider first', async () => {
-//       await service.executeSweep(validDto);
+  describe('canSweep', () => {
+    it('should delegate to ValidationProvider', async () => {
+      mockValidationProvider.canSweep.mockResolvedValue(true);
 
-//       expect(
-//         mockValidationProvider.validateSweepParameters,
-//       ).toHaveBeenCalledWith(validDto);
+      const result = await service.canSweep('account-id', 'GDEST...');
 
-//       expect(mockValidationProvider.validateSweepParameters).toHaveBeenCalled();
-//       expect(mockContractProvider.authorizeSweep).toHaveBeenCalled();
+      expect(mockValidationProvider.canSweep).toHaveBeenCalledWith(
+        'account-id',
 
-//       const validationCallOrder =
-//         mockValidationProvider.validateSweepParameters.mock
-//           .invocationCallOrder[0];
-//       const authCallOrder =
-//         mockContractProvider.authorizeSweep.mock.invocationCallOrder[0];
-//       expect(validationCallOrder).toBeLessThan(authCallOrder);
-//     });
+        'GDEST...',
+      );
 
-//     it('should call contract provider second', async () => {
-//       await service.executeSweep(validDto);
+      expect(result).toBe(true);
+    });
+  });
 
-//       expect(mockContractProvider.authorizeSweep).toHaveBeenCalledWith({
-//         ephemeralPublicKey: validDto.ephemeralPublicKey,
+  describe('getSweepStatus', () => {
+    it('should delegate to ValidationProvider', async () => {
+      const mockStatus = { canSweep: true };
 
-//         destinationAddress: validDto.destinationAddress,
-//       });
-//     });
+      mockValidationProvider.getSweepStatus.mockResolvedValue(mockStatus);
 
-//     it('should call transaction provider third', async () => {
-//       await service.executeSweep(validDto);
+      const result = await service.getSweepStatus('account-id');
 
-//       expect(
-//         mockTransactionProvider.executeSweepTransaction,
-//       ).toHaveBeenCalledWith({
-//         ephemeralSecret: validDto.ephemeralSecret,
+      expect(mockValidationProvider.getSweepStatus).toHaveBeenCalledWith(
+        'account-id',
+      );
 
-//         destinationAddress: validDto.destinationAddress,
-
-//         amount: validDto.amount,
-
-//         asset: validDto.asset,
-//       });
-//     });
-
-//     it('should attempt account merge', async () => {
-//       await service.executeSweep(validDto);
-
-//       expect(mockTransactionProvider.mergeAccount).toHaveBeenCalledWith({
-//         ephemeralSecret: validDto.ephemeralSecret,
-
-//         destinationAddress: validDto.destinationAddress,
-//       });
-//     });
-
-//     it('should continue if merge fails', async () => {
-//       mockTransactionProvider.mergeAccount.mockRejectedValue(
-//         new Error('Merge failed'),
-//       );
-
-//       const result = await service.executeSweep(validDto);
-
-//       expect(result.success).toBe(true);
-
-//       expect(result.txHash).toBe(mockTxResult.hash);
-//     });
-
-//     it('should propagate validation errors', async () => {
-//       mockValidationProvider.validateSweepParameters.mockRejectedValue(
-//         new Error('Validation failed'),
-//       );
-
-//       await expect(service.executeSweep(validDto)).rejects.toThrow(
-//         'Validation failed',
-//       );
-//     });
-
-//     it('should propagate contract errors', async () => {
-//       mockContractProvider.authorizeSweep.mockRejectedValue(
-//         new Error('Contract failed'),
-//       );
-
-//       await expect(service.executeSweep(validDto)).rejects.toThrow(
-//         'Contract failed',
-//       );
-//     });
-
-//     it('should propagate transaction errors', async () => {
-//       mockTransactionProvider.executeSweepTransaction.mockRejectedValue(
-//         new Error('Transaction failed'),
-//       );
-
-//       await expect(service.executeSweep(validDto)).rejects.toThrow(
-//         'Transaction failed',
-//       );
-//     });
-//   });
-
-//   describe('canSweep', () => {
-//     it('should delegate to ValidationProvider', async () => {
-//       mockValidationProvider.canSweep.mockResolvedValue(true);
-
-//       const result = await service.canSweep('account-id', 'GDEST...');
-
-//       expect(mockValidationProvider.canSweep).toHaveBeenCalledWith(
-//         'account-id',
-
-//         'GDEST...',
-//       );
-
-//       expect(result).toBe(true);
-//     });
-//   });
-
-//   describe('getSweepStatus', () => {
-//     it('should delegate to ValidationProvider', async () => {
-//       const mockStatus = { canSweep: true };
-
-//       mockValidationProvider.getSweepStatus.mockResolvedValue(mockStatus);
-
-//       const result = await service.getSweepStatus('account-id');
-
-//       expect(mockValidationProvider.getSweepStatus).toHaveBeenCalledWith(
-//         'account-id',
-//       );
-
-//       expect(result).toEqual(mockStatus);
-//     });
-//   });
-// });
-
-// This is a dummy test remove it after fix!!!
-describe('ValidationProvider', () => {
-  it('should be defined', () => {
-    expect(true).toBe(true);
+      expect(result).toEqual(mockStatus);
+    });
   });
 });
