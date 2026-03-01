@@ -46,7 +46,8 @@ export class AccountsController {
   @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({
     status: 429,
-    description: 'Rate limit exceeded — requests are throttled to protect funding flows',
+    description:
+      'Rate limit exceeded — requests are throttled to protect funding flows',
   })
   public async create(
     @Body() createAccountDto: CreateAccountDto,
@@ -71,7 +72,8 @@ export class AccountsController {
   @ApiResponse({ status: 404, description: 'Account not found' })
   @ApiResponse({
     status: 429,
-    description: 'Rate limit exceeded — requests are throttled to protect funding flows',
+    description:
+      'Rate limit exceeded — requests are throttled to protect funding flows',
   })
   public async findOne(@Param('id') id: string): Promise<AccountResponseDto> {
     return this.accountsService.findOne(id);
@@ -121,7 +123,8 @@ export class AccountsController {
   @ApiResponse({ status: 401, description: 'Authentication required' })
   @ApiResponse({
     status: 429,
-    description: 'Rate limit exceeded — requests are throttled to protect funding flows',
+    description:
+      'Rate limit exceeded — requests are throttled to protect funding flows',
   })
   public async findAll(
     @Query('status') status?: AccountStatus,
