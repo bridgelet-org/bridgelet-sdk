@@ -1,18 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { AccountStatus } from '../entities/account.entity.js';
 
-/**
- * Response DTO for account details
- *
- * Represents the public-facing contract for ephemeral Stellar account information.
- * This DTO is used in both account creation responses and account lookup endpoints.
- *
- * @remarks
- * - All fields are readonly to ensure immutability in API responses
- * - Date fields are in ISO 8601 format
- * - Amounts are represented as string decimals to preserve precision
- * - Status enum values indicate the current lifecycle state of the account
- */
 export class AccountResponseDto {
   @ApiProperty({
     description:
@@ -64,8 +52,7 @@ export class AccountResponseDto {
   amount: string;
 
   @ApiProperty({
-    description:
-      'Asset code for the funds in this account (e.g., XLM, USDC)',
+    description: 'Asset code for the funds in this account (e.g., XLM, USDC)',
     example: 'XLM',
     maxLength: 100,
     readOnly: true,
