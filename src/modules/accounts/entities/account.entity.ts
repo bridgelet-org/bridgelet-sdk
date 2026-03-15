@@ -65,7 +65,7 @@ export class Account {
   claimedAt: Date | null;
 
   @Column({ type: 'timestamp', nullable: true })
-  expiredAt: Date;
+  expiredAt: Date; // Set when expiry is processed. Distinct from expiresAt (scheduled time).
 
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, any>;
