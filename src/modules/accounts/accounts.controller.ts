@@ -84,7 +84,7 @@ export class AccountsController {
     summary: 'List ephemeral accounts (Admin)',
     description:
       'Administrative endpoint for listing all ephemeral accounts with optional filtering. ' +
-      'Supports filtering by status and cursor-based pagination using limit/offset. ' +
+      'Supports filtering by status and offset-based pagination using limit/offset. ' +
       'Maximum 100 records per request.',
   })
   @ApiQuery({
@@ -111,7 +111,7 @@ export class AccountsController {
     type: Number,
     required: false,
     description:
-      'Number of records to skip for cursor-based pagination. ' +
+      'Number of records to skip for offset-based pagination. ' +
       'Use with limit to paginate through results. Not page-based.',
     example: 0,
   })

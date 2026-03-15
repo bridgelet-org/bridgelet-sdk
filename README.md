@@ -2,6 +2,12 @@
 
 **Backend SDK for ephemeral Stellar account management**
 
+**MVP Stubs**
+
+> 🚧 **MVP — Active Development:** encryptSecret() — base64, not real encryption, must be replaced before any production deployment
+> 🚧 **The expiresIn → expiry_ledger conversion** — needs verification or explicit documentation of where it happens
+> 🚧 **Webhook coverage gaps**
+
 ## Overview
 
 The Bridgelet SDK is a NestJS-based backend service that manages the lifecycle of ephemeral Stellar accounts. It handles account creation, claim authentication, webhook notifications, and integration with the bridgelet-core smart contracts.
@@ -28,7 +34,19 @@ The following services/imports are currently **commented out** to allow `npm run
 
 ### How to Find Temporary Changes:
 
-Search the codebase for comments containing `TEMPORARY:` to locate all commented-out code that needs restoration.
+1. Search the codebase for comments containing `TEMPORARY:` to locate all commented-out code that needs restoration.
+
+2. **Secret Encryption** (`src/modules/accounts/accounts.service.ts`)
+   - **Current:** Base64 encoding (NOT encryption)
+   - **Impact:** Ephemeral secret keys are not protected at rest
+   - **Required:** AES-256-GCM or KMS-backed encryption before any deployment
+     with real funds
+
+3. **Ledger Expiry Conversion**
+   - `CreateAccountDto.expiresIn` (seconds) is not yet converted to
+     `expiry_ledger` (u32 ledger sequence) required by the contract
+   - `expiresAt` Date is currently unused in `StellarService`
+   - Conversion formula: `current_ledger + (expiresIn / 5)`
 
 ### Status:
 
