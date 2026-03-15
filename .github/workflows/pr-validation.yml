@@ -3,8 +3,6 @@ name: PR Validation
 on:
   pull_request:
     types: [opened, synchronize, edited, reopened]
-  push:
-    branches: ['main', 'develop']
 
 permissions:
   contents: read
