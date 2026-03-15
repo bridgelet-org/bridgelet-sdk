@@ -15,8 +15,8 @@ jobs:
     env:
       # Keep checks in warning mode until this date, then enforce with failures.
       ENFORCEMENT_START_DATE: '2026-02-27'
-      BRANCH_REGEX: '^(fix|feature|test|chore|docs)/issue-[0-9]+-[a-z0-9-]+$'
-      TITLE_REGEX: '^(Fix|Feature|Test|Chore|Docs): .+ \(#[0-9]+\)$'
+      BRANCH_REGEX: '^(fix|feature|test|chore|docs|refactor|hotfix|release|ci|build|revert)/[a-z0-9-]+$'
+      TITLE_REGEX: '^(fix|feature|test|chore|docs|refactor|hotfix|release|ci|build|revert): .+$'
 
     steps:
       - name: Validate branch and PR title
@@ -37,12 +37,12 @@ jobs:
           TITLE_VALID=true
 
           if [[ "$BRANCH_NAME" != "main" && "$BRANCH_NAME" != "develop" ]]; then
-            if [[ ! "$BRANCH_NAME" =~ $BRANCH_REGEX ]]; then
+            if [[ ! "${BRANCH_NAME,,}" =~ $BRANCH_REGEX ]]; then
               BRANCH_VALID=false
             fi
           fi
 
-          if [[ ! "$PR_TITLE" =~ $TITLE_REGEX ]]; then
+          if [[ ! "${PR_TITLE,,}" =~ $TITLE_REGEX ]]; then
             TITLE_VALID=false
           fi
 
@@ -55,19 +55,19 @@ jobs:
           echo "PR title: '$PR_TITLE'"
           echo ""
           echo "Expected branch format:"
-          echo "  (fix|feature|test|chore|docs)/issue-NUMBER-brief-description"
+          echo "  (fix|feature|test|chore|docs|refactor|...)/brief-description"
           echo "Regex: $BRANCH_REGEX"
           echo "Examples:"
-          echo "  - fix/issue-42-jwt-error-handling"
-          echo "  - feature/issue-50-webhook-service"
+          echo "  - fix/jwt-error-handling"
+          echo "  - feature/webhook-service"
           echo "Exemptions: main and develop"
           echo ""
           echo "Expected PR title format:"
-          echo "  (Fix|Feature|Test|Chore|Docs): Brief description (#NUMBER)"
+          echo "  (fix|feature|test|chore|docs|refactor|...): Brief description"
           echo "Regex: $TITLE_REGEX"
           echo "Examples:"
-          echo "  - Fix: Handle JWT errors in TokenVerificationProvider (#42)"
-          echo "  - Test: Add unit tests for ClaimLookupProvider (#43)"
+          echo "  - fix: Handle JWT errors in TokenVerificationProvider"
+          echo "  - test: Add unit tests for ClaimLookupProvider"
           echo ""
 
           if [[ "$ENFORCE_BLOCKING" == true ]]; then
@@ -96,22 +96,23 @@ jobs:
           set -euo pipefail
 
           valid_branches=(
-            "fix/issue-42-jwt-error-handling"
-            "test/issue-43-claim-lookup-provider-tests"
-            "feature/issue-50-webhook-service"
+            "fix/jwt-error-handling"
+            "test/claim-lookup-provider-tests"
+            "feature/webhook-service"
             "main"
             "develop"
           )
           invalid_branches=(
             "my-branch"
             "fix-stuff"
-            "feature/Issue-10-caps"
+            "123/starts-with-number"
           )
 
           valid_titles=(
-            "Fix: Handle JWT errors in TokenVerificationProvider (#42)"
-            "Test: Add unit tests for ClaimLookupProvider (#43)"
-            "Feature: Implement WebhooksService (#50)"
+            "fix: Handle JWT errors in TokenVerificationProvider"
+            "test: Add unit tests for ClaimLookupProvider"
+            "refactor: Clean up auth middleware"
+            "feature: Implement WebhooksService"
           )
           invalid_titles=(
             "fixed jwt errors"
