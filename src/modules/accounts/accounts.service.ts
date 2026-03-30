@@ -106,11 +106,14 @@ export class AccountsService {
 
     // Create account on Stellar
     const txHash = await this.stellarService.createEphemeralAccount({
-      publicKey: ephemeralKeypair.publicKey(),
-      amount: createAccountDto.amount,
-      asset: createAccountDto.asset,
-      expiresAt,
-    });
+  publicKey: ephemeralKeypair.publicKey(),
+  secretKey: ephemeralKeypair.secret(),
+  amount: createAccountDto.amount,
+  asset: createAccountDto.asset,
+  expiresAt,
+  expiresIn: createAccountDto.expiresIn,
+  fundingSource: createAccountDto.fundingSource,
+});
 
     // Generate claim token
     const claimToken = this.generateClaimToken(ephemeralKeypair.publicKey());
