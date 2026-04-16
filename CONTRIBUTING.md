@@ -15,16 +15,16 @@ All pull requests are validated automatically for branch naming and PR title for
 
 Accepted pattern:
 
-`(fix|feature|test|chore|docs)/issue-NUMBER-brief-description`
+`(fix|feature|test|chore|docs)/issue-brief-description`
 
 Regex used by CI:
 
-`^(fix|feature|test|chore|docs)/issue-[0-9]+-[a-z0-9-]+$`
+`^(fix|feature|test|chore|docs)/issue-[a-z0-9-]+$`
 
 Examples:
 
-- `fix/issue-42-jwt-error-handling`
-- `feature/issue-50-webhook-service`
+- `fix/issue-jwt-error-handling`
+- `feature/issue-webhook-service`
 
 `main` and `develop` are exempt for release/hotfix workflows.
 
@@ -48,8 +48,8 @@ Examples:
 Rename your local branch and push the new branch:
 
 ```bash
-git branch -m fix/issue-42-jwt-error-handling
-git push origin -u fix/issue-42-jwt-error-handling
+git branch -m fix/issue-jwt-error-handling
+git push origin -u fix/issue-jwt-error-handling
 ```
 
 Then update the PR to use the renamed branch. If needed, close the old PR and open a new one from the renamed branch.
@@ -69,9 +69,9 @@ Edit the PR title directly in GitHub:
 2. **Create a feature branch** from `main`:
 
 ```bash
-   git checkout -b fix/issue-123-description
+   git checkout -b fix/issue-description
    # or
-   git checkout -b feature/issue-456-description
+   git checkout -b feature/issue-description
 ```
 
 3. **Never push directly to `main`** - always work in a branch
