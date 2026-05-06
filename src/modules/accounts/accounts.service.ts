@@ -109,7 +109,11 @@ export class AccountsService {
       publicKey: ephemeralKeypair.publicKey(),
       amount: createAccountDto.amount,
       asset: createAccountDto.asset,
-      expiresAt,
+      expiresIn: createAccountDto.expiresIn,
+      recoveryAddress: createAccountDto.fundingSource,
+      contractId: this.configService.getOrThrow<string>(
+        'stellar.ephemeralContractId',
+      ),
     });
 
     // Generate claim token

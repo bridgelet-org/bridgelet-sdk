@@ -15,8 +15,8 @@ jobs:
     env:
       # Keep checks in warning mode until this date, then enforce with failures.
       ENFORCEMENT_START_DATE: '2026-02-27'
-      BRANCH_REGEX: '^(fix|feature|test|chore|docs|refactor|hotfix|release|ci|build|revert)/[a-z0-9-]+$'
-      TITLE_REGEX: '^(fix|feature|test|chore|docs|refactor|hotfix|release|ci|build|revert): .+$'
+      BRANCH_REGEX: '^(fix|feature|feat|test|chore|docs|refactor|ref|hotfix|release|ci|build|revert)/[a-z0-9-]+$'
+      TITLE_REGEX: '^(fix|feature|feat|test|chore|docs|refactor|ref|hotfix|release|ci|build|revert): .+$'
 
     steps:
       - name: Validate branch and PR title
@@ -55,7 +55,7 @@ jobs:
           echo "PR title: '$PR_TITLE'"
           echo ""
           echo "Expected branch format:"
-          echo "  (fix|feature|test|chore|docs|refactor|...)/brief-description"
+          echo "  (fix|feature|feat|test|chore|docs|refactor|...)/brief-description"
           echo "Regex: $BRANCH_REGEX"
           echo "Examples:"
           echo "  - fix/jwt-error-handling"
@@ -63,7 +63,7 @@ jobs:
           echo "Exemptions: main and develop"
           echo ""
           echo "Expected PR title format:"
-          echo "  (fix|feature|test|chore|docs|refactor|...): Brief description"
+          echo "  (fix|feature|feat|test|chore|docs|refactor|...): Brief description"
           echo "Regex: $TITLE_REGEX"
           echo "Examples:"
           echo "  - fix: Handle JWT errors in TokenVerificationProvider"

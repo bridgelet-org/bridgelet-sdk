@@ -5,7 +5,8 @@ export default registerAs('stellar', () => ({
   horizonUrl:
     process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org',
   sorobanRpcUrl:
-    process.env.SOROBAN_RPC_URL || 'https://soroban-testnet.stellar.org',
+    process.env.STELLAR_SOROBAN_RPC_URL ||
+    'https://soroban-testnet.stellar.org',
   fundingSecret: process.env.FUNDING_ACCOUNT_SECRET,
   recoveryPublic: process.env.RECOVERY_ACCOUNT_PUBLIC,
   contracts: {
