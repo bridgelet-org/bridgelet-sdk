@@ -8,6 +8,7 @@ import { StellarService } from '../stellar/stellar.service.js';
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
 import { ConfigService } from '@nestjs/config';
+import { PaymentMonitorProvider } from '../stellar/providers/payment-monitor-provider.js';
 
 /**
  * AccountsService — Service-Level Documentation & Contributor Guidance
@@ -93,6 +94,7 @@ export class AccountsService {
     private configService: ConfigService,
     private jwtService: JwtService,
     private stellarService: StellarService,
+    private paymentMonitor: PaymentMonitorProvider,
   ) {}
 
   public async create(
@@ -139,6 +141,11 @@ export class AccountsService {
     });
 
     await this.accountsRepository.save(account);
+
+    // Start monitoring for inbound payment on this account's Stellar address.
+    // PaymentMonitorService will call recordPayment() and update status to
+    // PENDING_CLAIM automatically when funds arrive.
+    this.paymentMonitor.watch(account);
 
     // Return response
     return {
