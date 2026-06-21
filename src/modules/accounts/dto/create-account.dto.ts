@@ -50,11 +50,11 @@ export class CreateAccountDto {
 
   @ApiProperty({
     example: 2592000,
-    description: 'Expiry in seconds (1 hour - 30 days)',
+    description: 'Expiry in seconds (1 hour - 90 days)',
   })
   @IsNumber()
   @Min(3600) // 1 hour
-  @Max(2592000) // 30 days
+  @Max(7776000) // 90 days
   expiresIn: number;
 
   @ApiProperty({ example: { userId: 'user_123' }, required: false })
