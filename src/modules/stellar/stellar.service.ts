@@ -117,6 +117,12 @@ export class StellarService {
     // Step 2: Initialize the Soroban contract with restrictions
     const expiryLedger = await this.toExpiryLedger(params.expiresIn);
 
+    this.logger.log(
+      `Expiry conversion: expiresIn=${params.expiresIn}s → expiryLedger=${expiryLedger} ` +
+        `(currentLedger=${Math.round(expiryLedger - Math.ceil(params.expiresIn / 5) - EXPIRY_BUFFER_LEDGERS)}, ` +
+        `offset=${expiryLedger - Math.round(expiryLedger - Math.ceil(params.expiresIn / 5) - EXPIRY_BUFFER_LEDGERS)} ledgers)`,
+    );
+
     const contract = new StellarSdk.Contract(params.contractId);
     const sourceAccount = await this.sorobanServer.getAccount(
       fundingKeypair.publicKey(),
