@@ -18,6 +18,7 @@ import { ConfigService } from '@nestjs/config';
 import { TransactionHashValidator } from '../../../common/validators/transaction-hash.validator.js';
 import { StellarAddressValidator } from '../../../common/validators/stellar-address.validator.js';
 import { WebhooksService } from '../../webhooks/webhooks.service.js';
+import { EncryptionConfig } from '../../../config/encryption.config.js';
 
 @Injectable()
 export class ClaimRedemptionProvider {
@@ -122,7 +123,7 @@ export class ClaimRedemptionProvider {
         ephemeralPublicKey: account.publicKey,
         ephemeralSecret: SecretEncryptionUtil.decrypt(
           account.secretKeyEncrypted,
-          this.configService.getOrThrow<string>('app.encryptionKey'),
+          this.configService.getOrThrow<EncryptionConfig>('encryption'),
         ),
 
         destinationAddress,

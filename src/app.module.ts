@@ -8,6 +8,7 @@ import { AccountsModule } from './modules/accounts/accounts.module.js';
 import databaseConfig from './config/database.config.js';
 import stellarConfig from './config/stellar.config.js';
 import appConfig from './config/app.config.js';
+import encryptionConfig from './config/encryption.config.js';
 import { StellarModule } from './modules/stellar/stellar.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { AppController } from './app.controller.js';
@@ -22,7 +23,7 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, stellarConfig, appConfig],
+      load: [databaseConfig, stellarConfig, appConfig, encryptionConfig],
     }),
 
     // Database

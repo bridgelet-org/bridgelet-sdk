@@ -41,12 +41,17 @@ describe('ClaimRedemptionProvider', () => {
   const VALID_DESTINATION =
     'GBULQKZ7SA56UKRI6LX2IB6XH3GJW2L34BMTOWMQFJBAQNPSHJJNOTGN';
   const VALID_TOKEN = 'valid.jwt.token';
+  const encryptionConfig = {
+    currentKeyId: 'primary',
+    keys: {
+      primary: 'a'.repeat(64),
+    },
+  };
 
-  // secretKeyEncrypted is base64-encoded so that decryptSecret() returns 'test-secret'
   const mockAccount: Partial<Account> = {
     id: 'account-uuid-1234',
     publicKey: 'GPUBKEY47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLL',
-    secretKeyEncrypted: Buffer.from('test-secret').toString('base64'),
+    secretKeyEncrypted: 'v1:primary:iv:tag:ciphertext',
     claimTokenHash: 'mock-token-hash',
     amount: '100.0000000',
     asset: 'native',
@@ -96,9 +101,7 @@ describe('ClaimRedemptionProvider', () => {
           provide: ConfigService,
           useValue: {
             get: jest.fn().mockReturnValue('mock-value'),
-            getOrThrow: jest.fn().mockReturnValue(
-              'a'.repeat(64), // 64 hex chars = 32 bytes
-            ),
+            getOrThrow: jest.fn().mockReturnValue(encryptionConfig),
           },
         },
         {
@@ -205,10 +208,13 @@ describe('ClaimRedemptionProvider', () => {
       });
     });
 
-    it('should decrypt ephemeral secret via base64 decode before passing to sweep', async () => {
-      // The decryptSecret method decodes base64 — 'test-secret' encoded becomes 'test-secret' decoded
+    it('should decrypt the encrypted secret with configured encryption keys', async () => {
       await provider.redeemClaim(VALID_TOKEN, VALID_DESTINATION);
 
+      expect(SecretEncryptionUtil.decrypt).toHaveBeenCalledWith(
+        mockAccount.secretKeyEncrypted,
+        encryptionConfig,
+      );
       expect(mockSweepsService.executeSweep).toHaveBeenCalledWith(
         expect.objectContaining({
           ephemeralSecret: 'test-secret',

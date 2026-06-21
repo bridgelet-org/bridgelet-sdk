@@ -4,7 +4,6 @@
 
 **MVP Stubs**
 
-> 🚧 **MVP — Active Development:** encryptSecret() — base64, not real encryption, must be replaced before any production deployment
 > 🚧 **The expiresIn → expiry_ledger conversion** — needs verification or explicit documentation of where it happens
 > 🚧 **Webhook coverage gaps**
 
@@ -36,11 +35,12 @@ The following services/imports are currently **commented out** to allow `npm run
 
 1. Search the codebase for comments containing `TEMPORARY:` to locate all commented-out code that needs restoration..
 
-2. **Secret Encryption** (`src/modules/accounts/accounts.service.ts`)
-   - **Current:** Base64 encoding (NOT encryption)
-   - **Impact:** Ephemeral secret keys are not protected at rest
-   - **Required:** AES-256-GCM or KMS-backed encryption before any deployment
-     with real funds
+2. **Secret Encryption** (`src/common/crypto/secret-encryption.util.ts`)
+   - **Current:** AES-256-GCM with a versioned key-id ciphertext format
+   - **Required config:** `ENCRYPTION_KEY` must be a 32-byte hex key, with
+     optional `ENCRYPTION_KEY_ID` and `ENCRYPTION_KEYS` for rotation
+   - **Development data migration:** records created by the old base64-only
+     placeholder cannot be decrypted; wipe and recreate local/testnet data
 
 3. **Ledger Expiry Conversion**
    - `CreateAccountDto.expiresIn` (seconds) is not yet converted to
@@ -165,6 +165,10 @@ SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
 # Security
 JWT_SECRET=your-secret-key
 CLAIM_TOKEN_EXPIRY=2592000  # 30 days
+ENCRYPTION_KEY_ID=primary
+ENCRYPTION_KEY=your-64-character-hex-string
+# Optional JSON keyring for decrypting older encrypted records during rotation
+# ENCRYPTION_KEYS={"previous":"previous-64-character-hex-string"}
 
 # Application
 PORT=3000

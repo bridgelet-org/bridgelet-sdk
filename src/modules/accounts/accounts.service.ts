@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { AccountStatus } from './enums/account-status.enum.js';
 import { SecretEncryptionUtil } from '../../common/crypto/secret-encryption.util.js';
 import { WebhooksService } from '../webhooks/webhooks.service.js';
+import { EncryptionConfig } from '../../config/encryption.config.js';
 
 /**
  * AccountsService — Service-Level Documentation & Contributor Guidance
@@ -36,7 +37,7 @@ import { WebhooksService } from '../webhooks/webhooks.service.js';
  * - MVP placeholders: Several methods in this file include intentionally
  *   lightweight or placeholder implementations that are NOT production secure.
  *   These are clearly marked in the code. Examples include:
- *     - `encryptSecret()` currently uses base64 for storage (NOT SECURE).
+ *     - Secret encryption depends on the configured AES-256-GCM keyring.
  *     - Token signing uses the configured JWT secret; ensure the secret
  *       management and rotation policies meet your security requirements.
  *
@@ -91,7 +92,7 @@ import { WebhooksService } from '../webhooks/webhooks.service.js';
 @Injectable()
 export class AccountsService {
   private readonly logger = new Logger(AccountsService.name);
-  private readonly encryptionKey: string;
+  private readonly encryptionConfig: EncryptionConfig;
 
   constructor(
     @InjectRepository(Account)
@@ -101,9 +102,8 @@ export class AccountsService {
     private stellarService: StellarService,
     private webhooksService: WebhooksService,
   ) {
-    this.encryptionKey = this.configService.getOrThrow<string>(
-      'stellar.encryptionKey',
-    );
+    this.encryptionConfig =
+      this.configService.getOrThrow<EncryptionConfig>('encryption');
   }
 
   public async create(
@@ -130,7 +130,7 @@ export class AccountsService {
       publicKey: ephemeralKeypair.publicKey(),
       secretKeyEncrypted: SecretEncryptionUtil.encrypt(
         ephemeralKeypair.secret(),
-        this.encryptionKey,
+        this.encryptionConfig,
       ),
       fundingSource: createAccountDto.fundingSource,
       amount: createAccountDto.amount,
