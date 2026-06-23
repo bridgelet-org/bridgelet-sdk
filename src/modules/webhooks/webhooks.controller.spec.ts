@@ -30,11 +30,11 @@ describe('WebhooksController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [WebhooksController],
-      providers: [
-        { provide: WebhooksService, useValue: mockWebhooksService },
-      ],
+      providers: [{ provide: WebhooksService, useValue: mockWebhooksService }],
     })
-      .overrideGuard(require('../../common/guards/jwt-auth.guard.js').JwtAuthGuard)
+      .overrideGuard(
+        require('../../common/guards/jwt-auth.guard.js').JwtAuthGuard,
+      )
       .useValue({ canActivate: () => true })
       .overrideGuard(require('@nestjs/throttler').ThrottlerGuard)
       .useValue({ canActivate: () => true })
@@ -75,7 +75,10 @@ describe('WebhooksController', () => {
 
   describe('findAll', () => {
     it('returns a list of active webhooks', async () => {
-      const webhooks = [makeWebhookResponse(), makeWebhookResponse({ id: 'wh-uuid-2' })];
+      const webhooks = [
+        makeWebhookResponse(),
+        makeWebhookResponse({ id: 'wh-uuid-2' }),
+      ];
       mockWebhooksService.findAll.mockResolvedValue(webhooks);
 
       const result = await controller.findAll();

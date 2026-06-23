@@ -174,7 +174,9 @@ describe('AccountsService', () => {
       const saved = makeAccount();
       mockRepo.create.mockReturnValue(saved);
       mockRepo.save.mockResolvedValue(saved);
-      mockStellarService.createEphemeralAccount.mockRejectedValue('raw string error');
+      mockStellarService.createEphemeralAccount.mockRejectedValue(
+        'raw string error',
+      );
 
       await expect(service.create(dto)).rejects.toThrow('raw string error');
     });
@@ -201,9 +203,7 @@ describe('AccountsService', () => {
     });
 
     it('returns null claimUrl when claimTokenHash is absent', async () => {
-      mockRepo.findOne.mockResolvedValue(
-        makeAccount({ claimTokenHash: null }),
-      );
+      mockRepo.findOne.mockResolvedValue(makeAccount({ claimTokenHash: null }));
 
       const result = await service.findOne('uuid-1');
 
@@ -211,7 +211,9 @@ describe('AccountsService', () => {
     });
 
     it('returns a masked claimUrl when claimTokenHash is present', async () => {
-      mockRepo.findOne.mockResolvedValue(makeAccount({ claimTokenHash: 'abc' }));
+      mockRepo.findOne.mockResolvedValue(
+        makeAccount({ claimTokenHash: 'abc' }),
+      );
 
       const result = await service.findOne('uuid-1');
 

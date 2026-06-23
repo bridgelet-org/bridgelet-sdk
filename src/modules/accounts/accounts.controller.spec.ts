@@ -36,11 +36,11 @@ describe('AccountsController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AccountsController],
-      providers: [
-        { provide: AccountsService, useValue: mockAccountsService },
-      ],
+      providers: [{ provide: AccountsService, useValue: mockAccountsService }],
     })
-      .overrideGuard(require('../../common/guards/jwt-auth.guard.js').JwtAuthGuard)
+      .overrideGuard(
+        require('../../common/guards/jwt-auth.guard.js').JwtAuthGuard,
+      )
       .useValue({ canActivate: () => true })
       .overrideGuard(require('@nestjs/throttler').ThrottlerGuard)
       .useValue({ canActivate: () => true })

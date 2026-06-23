@@ -24,7 +24,8 @@ describe('SweepSignerUtil.buildMessage', () => {
   });
 
   it('produces a different message for a different contract', () => {
-    const otherContract = 'CASJFOEQG3WN42CR37EKINFO77PP7UO2DT5XCNHITYT7WUHL7X3RYQFE';
+    const otherContract =
+      'CASJFOEQG3WN42CR37EKINFO77PP7UO2DT5XCNHITYT7WUHL7X3RYQFE';
     // Note: we just need two distinct contract IDs; if they happen to produce
     // the same hash (unlikely) the test would fail—which is fine to flag.
     const msg1 = SweepSignerUtil.buildMessage(DEST_KEY, 0n, CONTRACT_ID);

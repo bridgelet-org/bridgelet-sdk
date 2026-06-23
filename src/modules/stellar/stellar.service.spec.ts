@@ -10,7 +10,8 @@ const mockConfigService = {
       'stellar.horizonUrl': 'https://horizon-testnet.stellar.org',
       'stellar.sorobanRpcUrl': 'https://soroban-testnet.stellar.org',
       'stellar.network': 'testnet',
-      'stellar.fundingSecret': 'SCOCOEM6N6JNB5MAPWFRMMTMSUZW6RZ4KPKOMYUFXJKCUQUNVWDCJK2K',
+      'stellar.fundingSecret':
+        'SCOCOEM6N6JNB5MAPWFRMMTMSUZW6RZ4KPKOMYUFXJKCUQUNVWDCJK2K',
       'stellar.contracts.ephemeralAccount': 'CONTRACT123',
     };
     const value = config[key];
@@ -45,8 +46,10 @@ function makeSorobanServer() {
 
 // ── Shared fixtures ───────────────────────────────────────────────────────────
 
-const FUNDING_SECRET = 'SCOCOEM6N6JNB5MAPWFRMMTMSUZW6RZ4KPKOMYUFXJKCUQUNVWDCJK2K';
-const SIGNER_SECRET = 'SCOCOEM6N6JNB5MAPWFRMMTMSUZW6RZ4KPKOMYUFXJKCUQUNVWDCJK2K';
+const FUNDING_SECRET =
+  'SCOCOEM6N6JNB5MAPWFRMMTMSUZW6RZ4KPKOMYUFXJKCUQUNVWDCJK2K';
+const SIGNER_SECRET =
+  'SCOCOEM6N6JNB5MAPWFRMMTMSUZW6RZ4KPKOMYUFXJKCUQUNVWDCJK2K';
 const FUNDING_KEYPAIR = StellarSdk.Keypair.fromSecret(FUNDING_SECRET);
 const DEST_KEY = FUNDING_KEYPAIR.publicKey();
 // Valid Soroban contract address (56 chars, C-prefix strkey)
@@ -460,9 +463,7 @@ describe('StellarService', () => {
         _parsed: false,
       });
       // Make isSimulationError return true
-      jest
-        .spyOn(SorobanRpc.Api, 'isSimulationError')
-        .mockReturnValue(true);
+      jest.spyOn(SorobanRpc.Api, 'isSimulationError').mockReturnValue(true);
 
       await expect(service.getAccountInfo(CONTRACT_ID)).rejects.toThrow(
         'get_info simulation failed',

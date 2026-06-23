@@ -18,7 +18,11 @@ describe('mapContractError', () => {
     ['NotExpired', HttpStatus.CONFLICT, 'NOT_EXPIRED'],
     ['InvalidStatus', HttpStatus.CONFLICT, 'INVALID_STATUS'],
     ['AuthorizationFailed', HttpStatus.FORBIDDEN, 'AUTHORIZATION_FAILED'],
-    ['UnauthorizedDestination', HttpStatus.FORBIDDEN, 'UNAUTHORIZED_DESTINATION'],
+    [
+      'UnauthorizedDestination',
+      HttpStatus.FORBIDDEN,
+      'UNAUTHORIZED_DESTINATION',
+    ],
     ['AccountNotReady', HttpStatus.CONFLICT, 'ACCOUNT_NOT_READY'],
     ['AccountAlreadySwept', HttpStatus.GONE, 'ACCOUNT_ALREADY_SWEPT'],
   ])(
