@@ -18,6 +18,7 @@ import { ConfigService } from '@nestjs/config';
 import { TransactionHashValidator } from '../../../common/validators/transaction-hash.validator.js';
 import { StellarAddressValidator } from '../../../common/validators/stellar-address.validator.js';
 import { WebhooksService } from '../../webhooks/webhooks.service.js';
+import { ClaimAuditProvider } from './claim-audit.provider.js';
 
 @Injectable()
 export class ClaimRedemptionProvider {
@@ -34,11 +35,13 @@ export class ClaimRedemptionProvider {
     private sweepsService: SweepsService,
     private configService: ConfigService,
     private webhooksService: WebhooksService,
+    private claimAuditProvider: ClaimAuditProvider,
   ) {}
 
   async redeemClaim(
     token: string,
     destinationAddress: string,
+    ip?: string | null,
   ): Promise<ClaimRedemptionResponseDto> {
     this.logger.log(`Redeeming claim for destination: ${destinationAddress}`);
 
@@ -160,6 +163,13 @@ export class ClaimRedemptionProvider {
 
       this.logger.log(`Claim redeemed successfully: ${claim.id}`);
 
+      await this.claimAuditProvider.record({
+        accountId: account.id,
+        destination: destinationAddress,
+        ip,
+        outcome: 'success',
+      });
+
       await this.webhooksService.triggerEvent('sweep.completed', {
         accountId: account.id,
         amount: account.amount,
@@ -190,6 +200,14 @@ export class ClaimRedemptionProvider {
         `Claim redemption failed: ${typedError.message}`,
         typedError.stack,
       );
+
+      await this.claimAuditProvider.record({
+        accountId: account.id,
+        destination: destinationAddress,
+        ip,
+        outcome: 'failure',
+        failureReason: typedError.message,
+      });
 
       await this.webhooksService.triggerEvent('sweep.failed', {
         accountId: account.id,
