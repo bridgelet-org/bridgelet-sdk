@@ -8,12 +8,14 @@ import { DataSource } from 'typeorm';
 import { Account } from '../src/modules/accounts/entities/account.entity.js';
 import { AccountStatus } from '../src/modules/accounts/enums/account-status.enum.js';
 import { Claim } from '../src/modules/claims/entities/claim.entity.js';
+import { WebhookDelivery } from '../src/modules/webhooks/entities/webhook-delivery.entity.js';
 import { Webhook } from '../src/modules/webhooks/entities/webhook.entity.js';
 import { CreateAccountsTable1718100000000 } from '../src/database/migrations/1718100000000-CreateAccountsTable.js';
 import { CreateClaimsTable1718100001000 } from '../src/database/migrations/1718100001000-CreateClaimsTable.js';
 import { AddInitializingToAccountStatus1718100002000 } from '../src/database/migrations/1718100002000-AddInitializingToAccountStatus.js';
 import { CreateWebhooksTable1718100003000 } from '../src/database/migrations/1718100003000-CreateWebhooksTable.js';
 import { AddClaimingToAccountStatus1718100004000 } from '../src/database/migrations/1718100004000-AddClaimingToAccountStatus.js';
+import { CreateWebhookDeliveriesTable1718100005000 } from '../src/database/migrations/1718100005000-CreateWebhookDeliveriesTable.js';
 
 const postgresUser = 'postgres';
 const postgresPassword = 'postgres';
@@ -25,6 +27,7 @@ const migrations = [
   AddInitializingToAccountStatus1718100002000,
   CreateWebhooksTable1718100003000,
   AddClaimingToAccountStatus1718100004000,
+  CreateWebhookDeliveriesTable1718100005000,
 ];
 
 type SqlInMemoryLog = {
@@ -86,7 +89,7 @@ async function main(): Promise<void> {
       username: postgresUser,
       password: postgresPassword,
       database: postgresDatabase,
-      entities: [Account, Claim, Webhook],
+      entities: [Account, Claim, Webhook, WebhookDelivery],
       migrations,
       migrationsTransactionMode: 'each',
       synchronize: false,
@@ -115,12 +118,24 @@ async function main(): Promise<void> {
     const queryRunner = dataSource.createQueryRunner();
     let foreignKeyColumns: string[][] = [];
     let foreignKeyRejected = false;
+    let deliveryForeignKeyColumns: string[][] = [];
+    let deliveryForeignKeyRejected = false;
+    let deliveryIndexes: string[][] = [];
 
     try {
       const claimsTable = await queryRunner.getTable('claims');
       foreignKeyColumns =
         claimsTable?.foreignKeys.map((foreignKey) => foreignKey.columnNames) ??
         [];
+
+      const webhookDeliveriesTable =
+        await queryRunner.getTable('webhook_deliveries');
+      deliveryForeignKeyColumns =
+        webhookDeliveriesTable?.foreignKeys.map(
+          (foreignKey) => foreignKey.columnNames,
+        ) ?? [];
+      deliveryIndexes =
+        webhookDeliveriesTable?.indices.map((index) => index.columnNames) ?? [];
     } finally {
       await queryRunner.release();
     }
@@ -154,12 +169,35 @@ async function main(): Promise<void> {
         error.code === '23503';
     }
 
+    try {
+      await dataSource.query(
+        `
+          INSERT INTO "webhook_deliveries" (
+            "subscription_id",
+            "event_type",
+            "payload_hash"
+          )
+          VALUES ($1, $2, $3)
+        `,
+        [randomUUID(), 'account.created', 'b'.repeat(64)],
+      );
+    } catch (error) {
+      deliveryForeignKeyRejected =
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        error.code === '23503';
+    }
+
     process.stdout.write(
       JSON.stringify({
         enumValues: enumRows.map(({ enumlabel }) => enumlabel),
         executedMigrationNames: executedMigrations.map(({ name }) => name),
         foreignKeyColumns,
         foreignKeyRejected,
+        deliveryForeignKeyColumns,
+        deliveryForeignKeyRejected,
+        deliveryIndexes,
         schemaInSync: schemaLog.upQueries.length === 0,
       }),
     );

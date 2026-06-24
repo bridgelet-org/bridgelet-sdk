@@ -114,6 +114,7 @@ cp .env.example .env
 #   1718100002000-AddInitializingToAccountStatus (adds INITIALIZING to account_status enum)
 #   1718100003000-CreateWebhooksTable            (webhooks table)
 #   1718100004000-AddClaimingToAccountStatus     (adds CLAIMING to account_status enum)
+#   1718100005000-CreateWebhookDeliveriesTable   (webhook delivery attempt log table)
 npm run migration:run
 
 # Start development server
@@ -142,7 +143,7 @@ npm run test:cov
 
 Coverage reports are generated in the `coverage/` directory. The build will fail if any metric (branches, functions, lines, statements) falls below 80%.
 
-The repository also includes an embedded-Postgres integration test in `src/database/migrations.integration.spec.ts` that starts a fresh PostgreSQL instance, runs all current migrations, verifies the resulting schema matches the TypeORM entities, checks the `account_status_enum` values, and confirms the `claims.accountId -> accounts.id` foreign key is enforced.
+The repository also includes an embedded-Postgres integration test in `src/database/migrations.integration.spec.ts` that starts a fresh PostgreSQL instance, runs all current migrations, verifies the resulting schema matches the TypeORM entities, checks the `account_status_enum` values, and confirms the `claims.accountId -> accounts.id` and `webhook_deliveries.subscription_id -> webhooks.id` foreign keys are enforced.
 
 To check coverage for a specific file:
 
