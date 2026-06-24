@@ -6,7 +6,6 @@ import * as path from 'path';
 import EmbeddedPostgres from 'embedded-postgres';
 import { DataSource } from 'typeorm';
 import { Account } from '../src/modules/accounts/entities/account.entity.js';
-import { AccountStatus } from '../src/modules/accounts/enums/account-status.enum.js';
 import { Claim } from '../src/modules/claims/entities/claim.entity.js';
 import { WebhookDelivery } from '../src/modules/webhooks/entities/webhook-delivery.entity.js';
 import { Webhook } from '../src/modules/webhooks/entities/webhook.entity.js';
@@ -32,6 +31,10 @@ const migrations = [
 
 type SqlInMemoryLog = {
   upQueries: unknown[];
+};
+
+type PgErrorLike = {
+  code?: string;
 };
 
 async function getFreePort(): Promise<number> {
@@ -164,11 +167,9 @@ async function main(): Promise<void> {
         ],
       );
     } catch (error) {
+      const pgError = error as PgErrorLike;
       foreignKeyRejected =
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        error.code === '23503';
+        typeof error === 'object' && error !== null && pgError.code === '23503';
     }
 
     try {
@@ -184,11 +185,9 @@ async function main(): Promise<void> {
         [randomUUID(), 'account.created', 'b'.repeat(64)],
       );
     } catch (error) {
+      const pgError = error as PgErrorLike;
       deliveryForeignKeyRejected =
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        error.code === '23503';
+        typeof error === 'object' && error !== null && pgError.code === '23503';
     }
 
     process.stdout.write(
