@@ -57,18 +57,20 @@ describe('throwContractError', () => {
     expect(() => throwContractError('AccountExpired')).toThrow();
     try {
       throwContractError('AccountExpired');
-    } catch (e: any) {
-      expect(e.getStatus()).toBe(HttpStatus.GONE);
-      expect(e.getResponse().errorCode).toBe('ACCOUNT_EXPIRED');
+    } catch (e: unknown) {
+      const ex = e as { getStatus: () => number; getResponse: () => { errorCode: string } };
+      expect(ex.getStatus()).toBe(HttpStatus.GONE);
+      expect(ex.getResponse().errorCode).toBe('ACCOUNT_EXPIRED');
     }
   });
 
   it('throws an HttpException with HTTP 500 for an unknown error', () => {
     try {
       throwContractError('mystery error');
-    } catch (e: any) {
-      expect(e.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
-      expect(e.getResponse().errorCode).toBe('UNKNOWN_CONTRACT_ERROR');
+    } catch (e: unknown) {
+      const ex = e as { getStatus: () => number; getResponse: () => { errorCode: string } };
+      expect(ex.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
+      expect(ex.getResponse().errorCode).toBe('UNKNOWN_CONTRACT_ERROR');
     }
   });
 });

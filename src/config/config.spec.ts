@@ -9,6 +9,8 @@
  * which Jest cannot dynamically import in CommonJS mode — they are excluded.
  */
 
+type ConfigFactory = () => Record<string, unknown>;
+
 describe('app.config', () => {
   beforeEach(() => {
     jest.resetModules();
@@ -28,7 +30,7 @@ describe('app.config', () => {
 
   it('returns defaults when env vars are not set', async () => {
     const mod = await import('./app.config.js');
-    const config = (mod.default as any)();
+    const config = (mod.default as unknown as ConfigFactory)();
     expect(config.port).toBe(3000);
     expect(config.env).toBe('development');
   });
@@ -36,28 +38,28 @@ describe('app.config', () => {
   it('uses env var PORT when set', async () => {
     process.env.PORT = '4000';
     const mod = await import('./app.config.js');
-    const config = (mod.default as any)();
+    const config = (mod.default as unknown as ConfigFactory)();
     expect(config.port).toBe(4000);
   });
 
   it('uses NODE_ENV when set', async () => {
     process.env.NODE_ENV = 'production';
     const mod = await import('./app.config.js');
-    const config = (mod.default as any)();
+    const config = (mod.default as unknown as ConfigFactory)();
     expect(config.env).toBe('production');
   });
 
   it('uses JWT_SECRET when set', async () => {
     process.env.JWT_SECRET = 'my-test-secret';
     const mod = await import('./app.config.js');
-    const config = (mod.default as any)();
+    const config = (mod.default as unknown as ConfigFactory)();
     expect(config.jwtSecret).toBe('my-test-secret');
   });
 
   it('uses CLAIM_TOKEN_EXPIRY when set', async () => {
     process.env.CLAIM_TOKEN_EXPIRY = '86400';
     const mod = await import('./app.config.js');
-    const config = (mod.default as any)();
+    const config = (mod.default as unknown as ConfigFactory)();
     expect(config.claimTokenExpiry).toBe(86400);
   });
 });
@@ -80,7 +82,7 @@ describe('stellar.config', () => {
 
   it('returns testnet defaults when env vars are not set', async () => {
     const mod = await import('./stellar.config.js');
-    const config = (mod.default as any)();
+    const config = (mod.default as unknown as ConfigFactory)();
     expect(config.network).toBe('testnet');
     expect(config.horizonUrl).toContain('testnet');
     expect(config.sorobanRpcUrl).toContain('testnet');
@@ -89,21 +91,21 @@ describe('stellar.config', () => {
   it('uses STELLAR_NETWORK when set', async () => {
     process.env.STELLAR_NETWORK = 'mainnet';
     const mod = await import('./stellar.config.js');
-    const config = (mod.default as any)();
+    const config = (mod.default as unknown as ConfigFactory)();
     expect(config.network).toBe('mainnet');
   });
 
   it('uses STELLAR_HORIZON_URL when set', async () => {
     process.env.STELLAR_HORIZON_URL = 'https://horizon.stellar.org';
     const mod = await import('./stellar.config.js');
-    const config = (mod.default as any)();
+    const config = (mod.default as unknown as ConfigFactory)();
     expect(config.horizonUrl).toBe('https://horizon.stellar.org');
   });
 
   it('uses STELLAR_SOROBAN_RPC_URL when set', async () => {
     process.env.STELLAR_SOROBAN_RPC_URL = 'https://soroban.stellar.org';
     const mod = await import('./stellar.config.js');
-    const config = (mod.default as any)();
+    const config = (mod.default as unknown as ConfigFactory)();
     expect(config.sorobanRpcUrl).toBe('https://soroban.stellar.org');
   });
 });

@@ -4,6 +4,8 @@ import { AccountsService } from './accounts.service.js';
 import { AccountStatus } from './enums/account-status.enum.js';
 import { CreateAccountDto } from './dto/create-account.dto.js';
 import { AccountResponseDto } from './dto/account-response.dto.js';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
+import { ThrottlerGuard } from '@nestjs/throttler';
 
 const VALID_KEY = 'G' + 'A'.repeat(55);
 
@@ -38,11 +40,9 @@ describe('AccountsController', () => {
       controllers: [AccountsController],
       providers: [{ provide: AccountsService, useValue: mockAccountsService }],
     })
-      .overrideGuard(
-        require('../../common/guards/jwt-auth.guard.js').JwtAuthGuard,
-      )
+      .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
-      .overrideGuard(require('@nestjs/throttler').ThrottlerGuard)
+      .overrideGuard(ThrottlerGuard)
       .useValue({ canActivate: () => true })
       .compile();
 

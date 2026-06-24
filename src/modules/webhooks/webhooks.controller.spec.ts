@@ -3,6 +3,8 @@ import { WebhooksController } from './webhooks.controller.js';
 import { WebhooksService } from './webhooks.service.js';
 import { CreateWebhookDto } from './dto/create-webhook.dto.js';
 import { WebhookResponseDto } from './dto/webhook-response.dto.js';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
+import { ThrottlerGuard } from '@nestjs/throttler';
 
 const mockWebhooksService = {
   create: jest.fn(),
@@ -32,11 +34,9 @@ describe('WebhooksController', () => {
       controllers: [WebhooksController],
       providers: [{ provide: WebhooksService, useValue: mockWebhooksService }],
     })
-      .overrideGuard(
-        require('../../common/guards/jwt-auth.guard.js').JwtAuthGuard,
-      )
+      .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => true })
-      .overrideGuard(require('@nestjs/throttler').ThrottlerGuard)
+      .overrideGuard(ThrottlerGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
