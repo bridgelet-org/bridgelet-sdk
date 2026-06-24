@@ -58,7 +58,10 @@ describe('throwContractError', () => {
     try {
       throwContractError('AccountExpired');
     } catch (e: unknown) {
-      const ex = e as { getStatus: () => number; getResponse: () => { errorCode: string } };
+      const ex = e as {
+        getStatus: () => number;
+        getResponse: () => { errorCode: string };
+      };
       expect(ex.getStatus()).toBe(HttpStatus.GONE);
       expect(ex.getResponse().errorCode).toBe('ACCOUNT_EXPIRED');
     }
@@ -68,7 +71,10 @@ describe('throwContractError', () => {
     try {
       throwContractError('mystery error');
     } catch (e: unknown) {
-      const ex = e as { getStatus: () => number; getResponse: () => { errorCode: string } };
+      const ex = e as {
+        getStatus: () => number;
+        getResponse: () => { errorCode: string };
+      };
       expect(ex.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
       expect(ex.getResponse().errorCode).toBe('UNKNOWN_CONTRACT_ERROR');
     }

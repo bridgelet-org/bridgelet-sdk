@@ -76,8 +76,11 @@ describe('StellarService', () => {
     service = module.get<StellarService>(StellarService);
 
     // Replace internal SDK server references with our controlled mocks
-    (service as unknown as { server: unknown; sorobanServer: unknown }).server = horizonServer;
-    (service as unknown as { server: unknown; sorobanServer: unknown }).sorobanServer = sorobanServer;
+    (service as unknown as { server: unknown; sorobanServer: unknown }).server =
+      horizonServer;
+    (
+      service as unknown as { server: unknown; sorobanServer: unknown }
+    ).sorobanServer = sorobanServer;
   });
 
   // ── getCurrentLedger ────────────────────────────────────────────────────────
@@ -569,7 +572,9 @@ describe('StellarService', () => {
     it('uses TESTNET passphrase for non-mainnet networks', () => {
       // Already tested implicitly via createEphemeralAccount — just verify
       // we can instantiate with 'testnet' config without error
-      expect((service as unknown as { network: string }).network).toBe('testnet');
+      expect((service as unknown as { network: string }).network).toBe(
+        'testnet',
+      );
     });
 
     it('uses PUBLIC passphrase when network is mainnet', async () => {
@@ -593,7 +598,10 @@ describe('StellarService', () => {
       }).compile();
 
       const mainnetService = mainnetModule.get<StellarService>(StellarService);
-      type InternalService = { network: string; getNetworkPassphrase: () => string };
+      type InternalService = {
+        network: string;
+        getNetworkPassphrase: () => string;
+      };
       const internal = mainnetService as unknown as InternalService;
       expect(internal.network).toBe('mainnet');
       expect(internal.getNetworkPassphrase()).toBe(StellarSdk.Networks.PUBLIC);
