@@ -38,7 +38,9 @@ describe('Database migrations integration', () => {
     expect(result.enumValues).toEqual(Object.values(AccountStatus));
     expect(result.foreignKeyColumns).toContainEqual(['accountId']);
     expect(result.foreignKeyRejected).toBe(true);
-    expect(result.deliveryForeignKeyColumns).toContainEqual(['subscription_id']);
+    expect(result.deliveryForeignKeyColumns).toContainEqual([
+      'subscription_id',
+    ]);
     expect(result.deliveryForeignKeyRejected).toBe(true);
     expect(result.deliveryIndexes).toContainEqual([
       'subscription_id',
