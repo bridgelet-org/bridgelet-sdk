@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
- * AddHighTrafficIndexes1718100005000
+ * AddHighTrafficIndexes1718100006000
  *
  * Background — Query Audit
  * ────────────────────────
@@ -52,8 +52,8 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * All indexes use the default B-tree access method which PostgreSQL
  * can use for equality, range (<, >), and ORDER BY optimisation.
  */
-export class AddHighTrafficIndexes1718100005000 implements MigrationInterface {
-  name = 'AddHighTrafficIndexes1718100005000';
+export class AddHighTrafficIndexes1718100006000 implements MigrationInterface {
+  name = 'AddHighTrafficIndexes1718100006000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Composite index: expiry-scheduler query

@@ -10,7 +10,7 @@ import { AccountStatus } from '../enums/account-status.enum.js';
 
 /**
  * Composite indexes mirror the indexes created in migration
- * 1718100005000-AddHighTrafficIndexes.  They cover the two
+ * 1718100006000-AddHighTrafficIndexes.  They cover the two
  * high-traffic scheduler queries:
  *
  *   • Expiry job   – WHERE status IN (…) AND expiresAt < NOW()
