@@ -43,7 +43,7 @@ describe('ClaimAuditProvider', () => {
         outcome: 'success',
       });
 
-      const saved = repo.create.mock.calls[0][0] as any;
+      const saved = repo.create.mock.calls[0][0] as Partial<ClaimAuditLog>;
       expect(saved.destinationHash).toBe(sha256(DESTINATION));
       expect(JSON.stringify(saved)).not.toContain(DESTINATION);
     });
@@ -56,7 +56,7 @@ describe('ClaimAuditProvider', () => {
         outcome: 'success',
       });
 
-      const saved = repo.create.mock.calls[0][0] as any;
+      const saved = repo.create.mock.calls[0][0] as Partial<ClaimAuditLog>;
       expect(saved.ipHash).toBe(sha256(IP));
       expect(JSON.stringify(saved)).not.toContain(IP);
     });
@@ -68,7 +68,7 @@ describe('ClaimAuditProvider', () => {
         outcome: 'success',
       });
 
-      const saved = repo.create.mock.calls[0][0] as any;
+      const saved = repo.create.mock.calls[0][0] as Partial<ClaimAuditLog>;
       expect(saved.ipHash).toBeNull();
     });
 
@@ -79,7 +79,7 @@ describe('ClaimAuditProvider', () => {
         outcome: 'success',
       });
 
-      const saved = repo.create.mock.calls[0][0] as any;
+      const saved = repo.create.mock.calls[0][0] as Partial<ClaimAuditLog>;
       expect(saved.outcome).toBe('success');
     });
 
@@ -102,7 +102,7 @@ describe('ClaimAuditProvider', () => {
         failureReason: 'Token expired',
       });
 
-      const saved = repo.create.mock.calls[0][0] as any;
+      const saved = repo.create.mock.calls[0][0] as Partial<ClaimAuditLog>;
       expect(saved.outcome).toBe('failure');
       expect(saved.failureReason).toBe('Token expired');
     });
@@ -114,7 +114,7 @@ describe('ClaimAuditProvider', () => {
         outcome: 'failure',
       });
 
-      const saved = repo.create.mock.calls[0][0] as any;
+      const saved = repo.create.mock.calls[0][0] as Partial<ClaimAuditLog>;
       expect(saved.failureReason).toBeNull();
     });
   });
