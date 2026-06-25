@@ -51,7 +51,9 @@ describe('SweepsService', () => {
     generateAuthSignature: jest.Mock<() => any>;
     generateAuthHash: jest.Mock<() => any>;
   };
-  let transactionProvider: { executeSweepTransaction: jest.Mock<() => Promise<any>> };
+  let transactionProvider: {
+    executeSweepTransaction: jest.Mock<() => Promise<any>>;
+  };
   let stellarService: { executeSweep: jest.Mock<() => Promise<any>> };
 
   beforeEach(async () => {
@@ -157,11 +159,13 @@ describe('SweepsService', () => {
 
     it('calls validation before the contract call', async () => {
       const order: string[] = [];
-      validationProvider.validateSweepParameters.mockImplementation(async () => {
+      validationProvider.validateSweepParameters.mockImplementation(() => {
         order.push('validate');
+        return Promise.resolve();
       });
-      stellarService.executeSweep.mockImplementation(async () => {
+      stellarService.executeSweep.mockImplementation(() => {
         order.push('contract');
+        return Promise.resolve();
       });
 
       await service.executeSweep(validRequest);
@@ -171,12 +175,13 @@ describe('SweepsService', () => {
 
     it('calls the contract before the Horizon payment', async () => {
       const order: string[] = [];
-      stellarService.executeSweep.mockImplementation(async () => {
+      stellarService.executeSweep.mockImplementation(() => {
         order.push('contract');
+        return Promise.resolve();
       });
-      transactionProvider.executeSweepTransaction.mockImplementation(async () => {
+      transactionProvider.executeSweepTransaction.mockImplementation(() => {
         order.push('payment');
-        return mockTxResult;
+        return Promise.resolve(mockTxResult as any);
       });
 
       await service.executeSweep(validRequest);
