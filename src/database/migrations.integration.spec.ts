@@ -39,9 +39,12 @@ describe('Database migrations integration', () => {
   });
 
   it('creates composite and standalone high-traffic indexes', () => {
-    expect(result.highTrafficIndexes).toContain('IDX_accounts_status_expiresAt');
-    expect(result.highTrafficIndexes).toContain('IDX_accounts_status_createdAt');
+    expect(result.highTrafficIndexes).toContain(
+      'IDX_accounts_status_expiresAt',
+    );
+    expect(result.highTrafficIndexes).toContain(
+      'IDX_accounts_status_createdAt',
+    );
     expect(result.highTrafficIndexes).toContain('IDX_accounts_createdAt');
   });
 });
-

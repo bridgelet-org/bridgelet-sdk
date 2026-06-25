@@ -39,12 +39,9 @@ describe('HealthController', () => {
 
     it('marks database as healthy', async () => {
       const result = await controller.check();
-      const db = result.services.database as {
-        healthy: boolean;
-        poolExhausted: boolean;
-      };
-      expect(db.healthy).toBe(true);
-      expect(db.poolExhausted).toBe(false);
+      const { healthy, poolExhausted } = result.services.database;
+      expect(healthy).toBe(true);
+      expect(poolExhausted).toBe(false);
     });
 
     it('includes an ISO timestamp', async () => {
@@ -96,14 +93,10 @@ describe('HealthController', () => {
       const promise = controller.check();
       jest.runAllTimers();
       const result = await promise;
-      const db = result.services.database as {
-        healthy: boolean;
-        poolExhausted: boolean;
-        error?: string;
-      };
-      expect(db.healthy).toBe(false);
-      expect(db.poolExhausted).toBe(true);
-      expect(db.error).toContain('exhausted');
+      const { healthy, poolExhausted, error } = result.services.database;
+      expect(healthy).toBe(false);
+      expect(poolExhausted).toBe(true);
+      expect(error).toContain('exhausted');
     });
   });
 
@@ -127,14 +120,10 @@ describe('HealthController', () => {
 
     it('marks database as unhealthy but NOT pool-exhausted', async () => {
       const result = await controller.check();
-      const db = result.services.database as {
-        healthy: boolean;
-        poolExhausted: boolean;
-        error?: string;
-      };
-      expect(db.healthy).toBe(false);
-      expect(db.poolExhausted).toBe(false);
-      expect(db.error).toContain('ECONNREFUSED');
+      const { healthy, poolExhausted, error } = result.services.database;
+      expect(healthy).toBe(false);
+      expect(poolExhausted).toBe(false);
+      expect(error).toContain('ECONNREFUSED');
     });
   });
 });

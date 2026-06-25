@@ -78,12 +78,8 @@ export class AddHighTrafficIndexes1718100005000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `DROP INDEX "IDX_accounts_status_expiresAt"`,
-    );
-    await queryRunner.query(
-      `DROP INDEX "IDX_accounts_status_createdAt"`,
-    );
+    await queryRunner.query(`DROP INDEX "IDX_accounts_status_expiresAt"`);
+    await queryRunner.query(`DROP INDEX "IDX_accounts_status_createdAt"`);
     await queryRunner.query(`DROP INDEX "IDX_accounts_createdAt"`);
   }
 }
