@@ -4,6 +4,7 @@ import { SweepsService } from './sweeps.service.js';
 import { ValidationProvider } from './providers/validation.provider.js';
 import { ContractProvider } from './providers/contract.provider.js';
 import { TransactionProvider } from './providers/transaction.provider.js';
+import { SweepMetricsProvider } from './providers/sweep-metrics.provider.js';
 import { Account } from '../accounts/entities/account.entity.js';
 import { StellarModule } from '../stellar/stellar.module.js';
 
@@ -14,6 +15,7 @@ import { StellarModule } from '../stellar/stellar.module.js';
     ValidationProvider,
     ContractProvider,
     TransactionProvider,
+    SweepMetricsProvider,
   ],
   exports: [SweepsService],
 })

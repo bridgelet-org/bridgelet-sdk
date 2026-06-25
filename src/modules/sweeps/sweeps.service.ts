@@ -7,6 +7,7 @@ import { StellarService } from '../stellar/stellar.service.js';
 import type { SweepExecutionRequest } from './interfaces/execute-sweep.interface.js';
 import type { SweepResult } from './interfaces/sweep-result.interface.js';
 import { TransactionResult } from './interfaces/transaction-result.interface.js';
+import { SweepMetricsProvider } from './providers/sweep-metrics.provider.js';
 
 @Injectable()
 export class SweepsService {
@@ -18,6 +19,7 @@ export class SweepsService {
     private readonly transactionProvider: TransactionProvider,
     private readonly stellarService: StellarService,
     private readonly configService: ConfigService,
+    private readonly sweepMetrics: SweepMetricsProvider,
   ) {}
 
   /**
@@ -98,10 +100,12 @@ export class SweepsService {
           `Error: ${(error as Error).message}`,
         (error as Error).stack,
       );
+      this.sweepMetrics.recordFailed();
       throw error;
     }
 
     this.logger.log(`Sweep complete: txHash=${transactionResult.hash}`);
+    this.sweepMetrics.recordCompleted();
 
     return {
       success: true,

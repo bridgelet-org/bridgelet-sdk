@@ -6,6 +6,7 @@ import { ContractProvider } from './providers/contract.provider.js';
 import { TransactionProvider } from './providers/transaction.provider.js';
 import { StellarService } from '../stellar/stellar.service.js';
 import { ConfigService } from '@nestjs/config';
+import { SweepMetricsProvider } from './providers/sweep-metrics.provider.js';
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -88,6 +89,7 @@ describe('SweepsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SweepsService,
+        SweepMetricsProvider,
         { provide: ValidationProvider, useValue: validationProvider },
         { provide: ContractProvider, useValue: contractProvider },
         { provide: TransactionProvider, useValue: transactionProvider },
