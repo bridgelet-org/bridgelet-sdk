@@ -7,12 +7,15 @@ import EmbeddedPostgres from 'embedded-postgres';
 import { DataSource } from 'typeorm';
 import { Account } from '../src/modules/accounts/entities/account.entity.js';
 import { Claim } from '../src/modules/claims/entities/claim.entity.js';
+import { WebhookDelivery } from '../src/modules/webhooks/entities/webhook-delivery.entity.js';
 import { Webhook } from '../src/modules/webhooks/entities/webhook.entity.js';
 import { CreateAccountsTable1718100000000 } from '../src/database/migrations/1718100000000-CreateAccountsTable.js';
 import { CreateClaimsTable1718100001000 } from '../src/database/migrations/1718100001000-CreateClaimsTable.js';
 import { AddInitializingToAccountStatus1718100002000 } from '../src/database/migrations/1718100002000-AddInitializingToAccountStatus.js';
 import { CreateWebhooksTable1718100003000 } from '../src/database/migrations/1718100003000-CreateWebhooksTable.js';
 import { AddClaimingToAccountStatus1718100004000 } from '../src/database/migrations/1718100004000-AddClaimingToAccountStatus.js';
+import { CreateWebhookDeliveriesTable1718100005000 } from '../src/database/migrations/1718100005000-CreateWebhookDeliveriesTable.js';
+import { AddHighTrafficIndexes1718100006000 } from '../src/database/migrations/1718100006000-AddHighTrafficIndexes.js';
 
 const postgresUser = 'postgres';
 const postgresPassword = 'postgres';
@@ -24,10 +27,18 @@ const migrations = [
   AddInitializingToAccountStatus1718100002000,
   CreateWebhooksTable1718100003000,
   AddClaimingToAccountStatus1718100004000,
+  CreateWebhookDeliveriesTable1718100005000,
+  AddHighTrafficIndexes1718100006000,
 ];
 
 type SqlInMemoryLog = {
   upQueries: unknown[];
+};
+
+type IndexRow = { indexname: string };
+
+type PgErrorLike = {
+  code?: string;
 };
 
 async function getFreePort(): Promise<number> {
@@ -87,7 +98,7 @@ async function main(): Promise<void> {
       username: postgresUser,
       password: postgresPassword,
       database: postgresDatabase,
-      entities: [Account, Claim, Webhook],
+      entities: [Account, Claim, Webhook, WebhookDelivery],
       migrations,
       migrationsTransactionMode: 'each',
       synchronize: false,
@@ -116,12 +127,24 @@ async function main(): Promise<void> {
     const queryRunner = dataSource.createQueryRunner();
     let foreignKeyColumns: string[][] = [];
     let foreignKeyRejected = false;
+    let deliveryForeignKeyColumns: string[][] = [];
+    let deliveryForeignKeyRejected = false;
+    let deliveryIndexes: string[][] = [];
 
     try {
       const claimsTable = await queryRunner.getTable('claims');
       foreignKeyColumns =
         claimsTable?.foreignKeys.map((foreignKey) => foreignKey.columnNames) ??
         [];
+
+      const webhookDeliveriesTable =
+        await queryRunner.getTable('webhook_deliveries');
+      deliveryForeignKeyColumns =
+        webhookDeliveriesTable?.foreignKeys.map(
+          (foreignKey) => foreignKey.columnNames,
+        ) ?? [];
+      deliveryIndexes =
+        webhookDeliveriesTable?.indices.map((index) => index.columnNames) ?? [];
     } finally {
       await queryRunner.release();
     }
@@ -153,13 +176,49 @@ async function main(): Promise<void> {
         typeof error === 'object' && error !== null && pgError.code === '23503';
     }
 
+    try {
+      await dataSource.query(
+        `
+          INSERT INTO "webhook_deliveries" (
+            "subscription_id",
+            "event_type",
+            "payload_hash"
+          )
+          VALUES ($1, $2, $3)
+        `,
+        [randomUUID(), 'account.created', 'b'.repeat(64)],
+      );
+    } catch (error) {
+      const pgError = error as PgErrorLike;
+      deliveryForeignKeyRejected =
+        typeof error === 'object' && error !== null && pgError.code === '23503';
+    }
+
+    // Verify the three high-traffic indexes added by migration 1718100006000
+    const indexRows: IndexRow[] = await dataSource.query(`
+      SELECT indexname
+      FROM pg_indexes
+      WHERE tablename = 'accounts'
+        AND indexname IN (
+          'IDX_accounts_status_expiresAt',
+          'IDX_accounts_status_createdAt',
+          'IDX_accounts_createdAt'
+        )
+      ORDER BY indexname
+    `);
+    const highTrafficIndexes = indexRows.map(({ indexname }) => indexname);
+
     process.stdout.write(
       JSON.stringify({
         enumValues: enumRows.map(({ enumlabel }) => enumlabel),
         executedMigrationNames: executedMigrations.map(({ name }) => name),
         foreignKeyColumns,
         foreignKeyRejected,
+        deliveryForeignKeyColumns,
+        deliveryForeignKeyRejected,
+        deliveryIndexes,
         schemaInSync: schemaLog.upQueries.length === 0,
+        highTrafficIndexes,
       }),
     );
   } finally {
@@ -176,6 +235,3 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
-type PgErrorLike = {
-  code?: string;
-};

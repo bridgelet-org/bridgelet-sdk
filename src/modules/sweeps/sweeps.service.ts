@@ -9,6 +9,7 @@ import type { SweepResult } from './interfaces/sweep-result.interface.js';
 import { TransactionResult } from './interfaces/transaction-result.interface.js';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter } from 'prom-client';
+import { SweepMetricsProvider } from './providers/sweep-metrics.provider.js';
 
 @Injectable()
 export class SweepsService {
@@ -24,6 +25,7 @@ export class SweepsService {
     private readonly sweepSuccessCounter: Counter<string>,
     @InjectMetric('sweep_failure_total')
     private readonly sweepFailureCounter: Counter<string>,
+    private readonly sweepMetrics: SweepMetricsProvider,
   ) {}
 
   /**
@@ -106,10 +108,12 @@ export class SweepsService {
           `Error: ${(error as Error).message}`,
         (error as Error).stack,
       );
+      this.sweepMetrics.recordFailed();
       throw error;
     }
 
     this.logger.log(`Sweep complete: txHash=${transactionResult.hash}`);
+    this.sweepMetrics.recordCompleted();
 
     return {
       success: true,

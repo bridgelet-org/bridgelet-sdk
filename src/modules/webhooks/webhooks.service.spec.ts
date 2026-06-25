@@ -43,14 +43,14 @@ describe('WebhooksService', () => {
   const mockQb = {
     where: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
-    getMany: jest.fn<() => Promise<Webhook[]>>().mockResolvedValue([]),
+    getMany: jest.fn().mockResolvedValue([]),
   };
 
   const mockWebhookRepository = {
     create: jest.fn(),
     save: jest.fn(),
-    find: jest.fn<() => Promise<Webhook[]>>().mockResolvedValue([]),
-    update: jest.fn<() => Promise<any>>().mockResolvedValue({ affected: 1 }),
+    find: jest.fn().mockResolvedValue([]),
+    update: jest.fn().mockResolvedValue({ affected: 1 }),
     createQueryBuilder: jest.fn().mockReturnValue(mockQb),
   };
 
