@@ -8,13 +8,15 @@ import { DataSource } from 'typeorm';
 import { Account } from '../src/modules/accounts/entities/account.entity.js';
 import { Claim } from '../src/modules/claims/entities/claim.entity.js';
 import { ContractEvent } from '../src/modules/stellar/entities/contract-event.entity.js';
+import { WebhookDelivery } from '../src/modules/webhooks/entities/webhook-delivery.entity.js';
 import { Webhook } from '../src/modules/webhooks/entities/webhook.entity.js';
 import { CreateAccountsTable1718100000000 } from '../src/database/migrations/1718100000000-CreateAccountsTable.js';
 import { CreateClaimsTable1718100001000 } from '../src/database/migrations/1718100001000-CreateClaimsTable.js';
 import { AddInitializingToAccountStatus1718100002000 } from '../src/database/migrations/1718100002000-AddInitializingToAccountStatus.js';
 import { CreateWebhooksTable1718100003000 } from '../src/database/migrations/1718100003000-CreateWebhooksTable.js';
 import { AddClaimingToAccountStatus1718100004000 } from '../src/database/migrations/1718100004000-AddClaimingToAccountStatus.js';
-import { CreateContractEventsTable1718100005000 } from '../src/database/migrations/1718100005000-CreateContractEventsTable.js';
+import { CreateWebhookDeliveriesTable1718100005000 } from '../src/database/migrations/1718100005000-CreateWebhookDeliveriesTable.js';
+import { CreateContractEventsTable1718100006000 } from '../src/database/migrations/1718100006000-CreateContractEventsTable.js';
 
 const postgresUser = 'postgres';
 const postgresPassword = 'postgres';
@@ -26,7 +28,8 @@ const migrations = [
   AddInitializingToAccountStatus1718100002000,
   CreateWebhooksTable1718100003000,
   AddClaimingToAccountStatus1718100004000,
-  CreateContractEventsTable1718100005000,
+  CreateWebhookDeliveriesTable1718100005000,
+  CreateContractEventsTable1718100006000,
 ];
 
 type SqlInMemoryLog = {
@@ -94,7 +97,7 @@ async function main(): Promise<void> {
       username: postgresUser,
       password: postgresPassword,
       database: postgresDatabase,
-      entities: [Account, Claim, Webhook, ContractEvent],
+      entities: [Account, Claim, Webhook, WebhookDelivery, ContractEvent],
       migrations,
       migrationsTransactionMode: 'each',
       synchronize: false,
@@ -125,12 +128,24 @@ async function main(): Promise<void> {
     let contractEventColumns: string[] = [];
     let foreignKeyRejected = false;
     let contractEventInsertSucceeded = false;
+    let deliveryForeignKeyColumns: string[][] = [];
+    let deliveryForeignKeyRejected = false;
+    let deliveryIndexes: string[][] = [];
 
     try {
       const claimsTable = await queryRunner.getTable('claims');
       foreignKeyColumns =
         claimsTable?.foreignKeys.map((foreignKey) => foreignKey.columnNames) ??
         [];
+
+      const webhookDeliveriesTable =
+        await queryRunner.getTable('webhook_deliveries');
+      deliveryForeignKeyColumns =
+        webhookDeliveriesTable?.foreignKeys.map(
+          (foreignKey) => foreignKey.columnNames,
+        ) ?? [];
+      deliveryIndexes =
+        webhookDeliveriesTable?.indices.map((index) => index.columnNames) ?? [];
 
       const contractEventsTable = await queryRunner.getTable('contract_events');
       contractEventColumns =
@@ -166,6 +181,24 @@ async function main(): Promise<void> {
         typeof error === 'object' && error !== null && pgError.code === '23503';
     }
 
+    try {
+      await dataSource.query(
+        `
+          INSERT INTO "webhook_deliveries" (
+            "subscription_id",
+            "event_type",
+            "payload_hash"
+          )
+          VALUES ($1, $2, $3)
+        `,
+        [randomUUID(), 'account.created', 'b'.repeat(64)],
+      );
+    } catch (error) {
+      const pgError = error as PgErrorLike;
+      deliveryForeignKeyRejected =
+        typeof error === 'object' && error !== null && pgError.code === '23503';
+    }
+
     await dataSource.query(
       `
         INSERT INTO "contract_events" (
@@ -195,6 +228,9 @@ async function main(): Promise<void> {
         foreignKeyRejected,
         contractEventColumns,
         contractEventInsertSucceeded,
+        deliveryForeignKeyColumns,
+        deliveryForeignKeyRejected,
+        deliveryIndexes,
         schemaInSync: schemaLog.upQueries.length === 0,
       }),
     );

@@ -11,6 +11,9 @@ type MigrationCheckResult = {
   foreignKeyRejected: boolean;
   contractEventColumns: string[];
   contractEventInsertSucceeded: boolean;
+  deliveryForeignKeyColumns: string[][];
+  deliveryForeignKeyRejected: boolean;
+  deliveryIndexes: string[][];
   schemaInSync: boolean;
 };
 
@@ -32,7 +35,7 @@ describe('Database migrations integration', () => {
   });
 
   it('applies every migration, matches entity metadata, and validates key tables', () => {
-    expect(result.executedMigrationNames).toHaveLength(6);
+    expect(result.executedMigrationNames).toHaveLength(7);
     expect(result.schemaInSync).toBe(true);
     expect(result.enumValues).toEqual(Object.values(AccountStatus));
     expect(result.foreignKeyColumns).toContainEqual(['accountId']);
@@ -47,5 +50,13 @@ describe('Database migrations integration', () => {
       'created_at',
     ]);
     expect(result.contractEventInsertSucceeded).toBe(true);
+    expect(result.deliveryForeignKeyColumns).toContainEqual([
+      'subscription_id',
+    ]);
+    expect(result.deliveryForeignKeyRejected).toBe(true);
+    expect(result.deliveryIndexes).toContainEqual([
+      'subscription_id',
+      'created_at',
+    ]);
   });
 });
