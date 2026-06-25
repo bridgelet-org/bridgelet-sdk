@@ -19,11 +19,13 @@ describe('Database migrations integration', () => {
   jest.setTimeout(180_000);
 
   let result: MigrationCheckResult;
+  const tsNodeRegisterImport =
+    'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("ts-node/esm/transpile-only", pathToFileURL("./"));';
 
   beforeAll(async () => {
     const { stdout } = await execFileAsync(
       process.execPath,
-      ['--loader', 'ts-node/esm', './test/migrations.integration.runner.ts'],
+      ['--import', tsNodeRegisterImport, './test/migrations.integration.runner.ts'],
       {
         cwd: process.cwd(),
       },
