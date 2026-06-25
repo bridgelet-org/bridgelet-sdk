@@ -7,6 +7,8 @@ import { StellarService } from '../stellar/stellar.service.js';
 import type { SweepExecutionRequest } from './interfaces/execute-sweep.interface.js';
 import type { SweepResult } from './interfaces/sweep-result.interface.js';
 import { TransactionResult } from './interfaces/transaction-result.interface.js';
+import { InjectMetric } from '@willsoto/nestjs-prometheus';
+import { Counter } from 'prom-client';
 import { SweepMetricsProvider } from './providers/sweep-metrics.provider.js';
 
 @Injectable()
@@ -19,6 +21,10 @@ export class SweepsService {
     private readonly transactionProvider: TransactionProvider,
     private readonly stellarService: StellarService,
     private readonly configService: ConfigService,
+    @InjectMetric('sweep_success_total')
+    private readonly sweepSuccessCounter: Counter<string>,
+    @InjectMetric('sweep_failure_total')
+    private readonly sweepFailureCounter: Counter<string>,
     private readonly sweepMetrics: SweepMetricsProvider,
   ) {}
 
@@ -91,7 +97,9 @@ export class SweepsService {
           amount: sweepExecutionRequest.amount,
           asset: sweepExecutionRequest.asset,
         });
+      this.sweepSuccessCounter.inc();
     } catch (error) {
+      this.sweepFailureCounter.inc();
       // Contract is now in Swept state but funds did not move.
       // This requires manual recovery — log with full context.
       this.logger.error(

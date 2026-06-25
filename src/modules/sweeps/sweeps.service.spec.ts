@@ -6,6 +6,7 @@ import { ContractProvider } from './providers/contract.provider.js';
 import { TransactionProvider } from './providers/transaction.provider.js';
 import { StellarService } from '../stellar/stellar.service.js';
 import { ConfigService } from '@nestjs/config';
+import { getToken } from '@willsoto/nestjs-prometheus';
 import { SweepMetricsProvider } from './providers/sweep-metrics.provider.js';
 
 // ---------------------------------------------------------------------------
@@ -42,16 +43,18 @@ describe('SweepsService', () => {
   let service: SweepsService;
 
   let validationProvider: {
-    validateSweepParameters: jest.Mock;
-    canSweep: jest.Mock;
-    getSweepStatus: jest.Mock;
+    validateSweepParameters: jest.Mock<() => Promise<any>>;
+    canSweep: jest.Mock<() => Promise<any>>;
+    getSweepStatus: jest.Mock<() => Promise<any>>;
   };
   let contractProvider: {
-    generateAuthSignature: jest.Mock;
-    generateAuthHash: jest.Mock;
+    generateAuthSignature: jest.Mock<() => any>;
+    generateAuthHash: jest.Mock<() => any>;
   };
-  let transactionProvider: { executeSweepTransaction: jest.Mock };
-  let stellarService: { executeSweep: jest.Mock };
+  let transactionProvider: {
+    executeSweepTransaction: jest.Mock<() => Promise<any>>;
+  };
+  let stellarService: { executeSweep: jest.Mock<() => Promise<any>> };
 
   beforeEach(async () => {
     validationProvider = {
@@ -95,6 +98,14 @@ describe('SweepsService', () => {
         { provide: TransactionProvider, useValue: transactionProvider },
         { provide: StellarService, useValue: stellarService },
         { provide: ConfigService, useValue: configMock },
+        {
+          provide: getToken('sweep_success_total'),
+          useValue: { inc: jest.fn() },
+        },
+        {
+          provide: getToken('sweep_failure_total'),
+          useValue: { inc: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -150,9 +161,11 @@ describe('SweepsService', () => {
       const order: string[] = [];
       validationProvider.validateSweepParameters.mockImplementation(() => {
         order.push('validate');
+        return Promise.resolve();
       });
       stellarService.executeSweep.mockImplementation(() => {
         order.push('contract');
+        return Promise.resolve();
       });
 
       await service.executeSweep(validRequest);
@@ -164,10 +177,11 @@ describe('SweepsService', () => {
       const order: string[] = [];
       stellarService.executeSweep.mockImplementation(() => {
         order.push('contract');
+        return Promise.resolve();
       });
       transactionProvider.executeSweepTransaction.mockImplementation(() => {
         order.push('payment');
-        return mockTxResult;
+        return Promise.resolve(mockTxResult as any);
       });
 
       await service.executeSweep(validRequest);

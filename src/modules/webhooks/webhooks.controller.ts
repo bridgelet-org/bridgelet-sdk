@@ -4,6 +4,7 @@ import {
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiBody,
 } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
@@ -27,6 +28,7 @@ export class WebhooksController {
   })
   @ApiResponse({ status: 400, description: 'Invalid input' })
   @ApiResponse({ status: 401, description: 'Authentication required' })
+  @ApiBody({ type: CreateWebhookDto })
   public async create(
     @Body() dto: CreateWebhookDto,
   ): Promise<WebhookResponseDto> {

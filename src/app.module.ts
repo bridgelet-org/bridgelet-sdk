@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 
 import { AccountsModule } from './modules/accounts/accounts.module.js';
 import databaseConfig from './config/database.config.js';
@@ -23,6 +24,9 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
     ConfigModule.forRoot({
       isGlobal: true,
       load: [databaseConfig, stellarConfig, appConfig],
+    }),
+    PrometheusModule.register({
+      path: '/metrics',
     }),
 
     // Database

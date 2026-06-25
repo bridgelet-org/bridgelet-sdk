@@ -1,5 +1,5 @@
 import { Controller, Get, HttpCode } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 
@@ -19,9 +19,10 @@ export class HealthController {
   @Get()
   @HttpCode(200)
   @ApiOperation({ summary: 'Health check – includes database pool status' })
+  @ApiResponse({ status: 200, description: 'Service is healthy' })
+  @ApiResponse({ status: 503, description: 'Service is unhealthy' })
   async check() {
     const dbStatus = await this.checkDatabasePool();
-
     return {
       status: dbStatus.healthy ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),

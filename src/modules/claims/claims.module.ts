@@ -10,6 +10,12 @@ import { TokenVerificationProvider } from './providers/token-verification.provid
 import { ClaimRedemptionProvider } from './providers/claim-redemption.provider.js';
 import { SweepsModule } from '../sweeps/sweeps.module.js';
 import { WebhooksModule } from '../webhooks/webhooks.module.js';
+import { makeCounterProvider } from '@willsoto/nestjs-prometheus';
+
+const claimRedemptionCounter = makeCounterProvider({
+  name: 'claim_redemption_total',
+  help: 'Total number of claims redeemed',
+});
 
 @Module({
   imports: [
@@ -23,6 +29,7 @@ import { WebhooksModule } from '../webhooks/webhooks.module.js';
     ClaimLookupProvider,
     ClaimRedemptionProvider,
     TokenVerificationProvider,
+    claimRedemptionCounter,
   ],
   exports: [ClaimsService],
 })
