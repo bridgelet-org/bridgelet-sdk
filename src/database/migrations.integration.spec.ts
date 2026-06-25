@@ -25,7 +25,11 @@ describe('Database migrations integration', () => {
   beforeAll(async () => {
     const { stdout } = await execFileAsync(
       process.execPath,
-      ['--import', tsNodeRegisterImport, './test/migrations.integration.runner.ts'],
+      [
+        '--import',
+        tsNodeRegisterImport,
+        './test/migrations.integration.runner.ts',
+      ],
       {
         cwd: process.cwd(),
       },
