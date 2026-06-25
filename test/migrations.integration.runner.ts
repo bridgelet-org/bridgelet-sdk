@@ -15,6 +15,7 @@ import { AddInitializingToAccountStatus1718100002000 } from '../src/database/mig
 import { CreateWebhooksTable1718100003000 } from '../src/database/migrations/1718100003000-CreateWebhooksTable.js';
 import { AddClaimingToAccountStatus1718100004000 } from '../src/database/migrations/1718100004000-AddClaimingToAccountStatus.js';
 import { CreateWebhookDeliveriesTable1718100005000 } from '../src/database/migrations/1718100005000-CreateWebhookDeliveriesTable.js';
+import { AddHighTrafficIndexes1718100006000 } from '../src/database/migrations/1718100006000-AddHighTrafficIndexes.js';
 
 const postgresUser = 'postgres';
 const postgresPassword = 'postgres';
@@ -27,11 +28,14 @@ const migrations = [
   CreateWebhooksTable1718100003000,
   AddClaimingToAccountStatus1718100004000,
   CreateWebhookDeliveriesTable1718100005000,
+  AddHighTrafficIndexes1718100006000,
 ];
 
 type SqlInMemoryLog = {
   upQueries: unknown[];
 };
+
+type IndexRow = { indexname: string };
 
 type PgErrorLike = {
   code?: string;
@@ -190,6 +194,20 @@ async function main(): Promise<void> {
         typeof error === 'object' && error !== null && pgError.code === '23503';
     }
 
+    // Verify the three high-traffic indexes added by migration 1718100006000
+    const indexRows: IndexRow[] = await dataSource.query(`
+      SELECT indexname
+      FROM pg_indexes
+      WHERE tablename = 'accounts'
+        AND indexname IN (
+          'IDX_accounts_status_expiresAt',
+          'IDX_accounts_status_createdAt',
+          'IDX_accounts_createdAt'
+        )
+      ORDER BY indexname
+    `);
+    const highTrafficIndexes = indexRows.map(({ indexname }) => indexname);
+
     process.stdout.write(
       JSON.stringify({
         enumValues: enumRows.map(({ enumlabel }) => enumlabel),
@@ -200,6 +218,7 @@ async function main(): Promise<void> {
         deliveryForeignKeyRejected,
         deliveryIndexes,
         schemaInSync: schemaLog.upQueries.length === 0,
+        highTrafficIndexes,
       }),
     );
   } finally {
