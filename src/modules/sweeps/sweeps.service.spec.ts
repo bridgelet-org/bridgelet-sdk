@@ -6,6 +6,7 @@ import { ContractProvider } from './providers/contract.provider.js';
 import { TransactionProvider } from './providers/transaction.provider.js';
 import { StellarService } from '../stellar/stellar.service.js';
 import { ConfigService } from '@nestjs/config';
+import { getToken } from '@willsoto/nestjs-prometheus';
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -93,6 +94,14 @@ describe('SweepsService', () => {
         { provide: TransactionProvider, useValue: transactionProvider },
         { provide: StellarService, useValue: stellarService },
         { provide: ConfigService, useValue: configMock },
+        {
+          provide: getToken('sweep_success_total'),
+          useValue: { inc: jest.fn() },
+        },
+        {
+          provide: getToken('sweep_failure_total'),
+          useValue: { inc: jest.fn() },
+        },
       ],
     }).compile();
 

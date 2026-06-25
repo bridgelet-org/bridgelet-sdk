@@ -8,6 +8,12 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PaymentMonitorProvider } from '../stellar/providers/payment-monitor-provider.js';
 import { WebhooksModule } from '../webhooks/webhooks.module.js';
+import { makeCounterProvider } from '@willsoto/nestjs-prometheus';
+
+const accountCreationCounter = makeCounterProvider({
+  name: 'account_creation_total',
+  help: 'Total number of accounts created',
+});
 
 @Module({
   imports: [
@@ -26,7 +32,7 @@ import { WebhooksModule } from '../webhooks/webhooks.module.js';
     WebhooksModule,
   ],
   controllers: [AccountsController],
-  providers: [AccountsService, PaymentMonitorProvider],
+  providers: [AccountsService, PaymentMonitorProvider, accountCreationCounter],
   exports: [AccountsService, JwtModule],
 })
 
