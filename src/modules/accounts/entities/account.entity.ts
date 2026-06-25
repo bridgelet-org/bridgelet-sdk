@@ -8,6 +8,20 @@ import {
 } from 'typeorm';
 import { AccountStatus } from '../enums/account-status.enum.js';
 
+/**
+ * Composite indexes mirror the indexes created in migration
+ * 1718100005000-AddHighTrafficIndexes.  They cover the two
+ * high-traffic scheduler queries:
+ *
+ *   • Expiry job   – WHERE status IN (…) AND expiresAt < NOW()
+ *   • Init cleanup – WHERE status = 'initializing' AND createdAt < <cutoff>
+ *
+ * Keeping the decorators here ensures TypeORM's schema-sync check
+ * (used in the integration test) stays green after the migration runs.
+ */
+@Index('IDX_accounts_status_expiresAt', ['status', 'expiresAt'])
+@Index('IDX_accounts_status_createdAt', ['status', 'createdAt'])
+@Index('IDX_accounts_createdAt', ['createdAt'])
 @Entity('accounts')
 export class Account {
   @PrimaryGeneratedColumn('uuid')
@@ -68,3 +82,4 @@ export class Account {
   @Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, any>;
 }
+

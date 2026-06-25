@@ -10,6 +10,7 @@ type MigrationCheckResult = {
   foreignKeyColumns: string[][];
   foreignKeyRejected: boolean;
   schemaInSync: boolean;
+  highTrafficIndexes: string[];
 };
 
 describe('Database migrations integration', () => {
@@ -30,10 +31,17 @@ describe('Database migrations integration', () => {
   });
 
   it('applies every migration, matches entity metadata, and enforces foreign keys', () => {
-    expect(result.executedMigrationNames).toHaveLength(5);
+    expect(result.executedMigrationNames).toHaveLength(6);
     expect(result.schemaInSync).toBe(true);
     expect(result.enumValues).toEqual(Object.values(AccountStatus));
     expect(result.foreignKeyColumns).toContainEqual(['accountId']);
     expect(result.foreignKeyRejected).toBe(true);
   });
+
+  it('creates composite and standalone high-traffic indexes', () => {
+    expect(result.highTrafficIndexes).toContain('IDX_accounts_status_expiresAt');
+    expect(result.highTrafficIndexes).toContain('IDX_accounts_status_createdAt');
+    expect(result.highTrafficIndexes).toContain('IDX_accounts_createdAt');
+  });
 });
+
