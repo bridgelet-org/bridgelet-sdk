@@ -3,6 +3,7 @@
 describe('TransactionHashValidator', () => {
   const validHash =
     '571a84bc59fefb3fd17fe167b9c76286e83c31972649441a2d09da87f5b997a7';
+  const isValidLoose = TransactionHashValidator.isValid;
 
   describe('isValid', () => {
     it('returns true for a valid 64-char hex hash', () => {
@@ -26,7 +27,7 @@ describe('TransactionHashValidator', () => {
     });
 
     it('returns false for null without throwing', () => {
-      expect(TransactionHashValidator.isValid(null as any)).toBe(false);
+      expect(isValidLoose(null)).toBe(false);
     });
 
     it('accepts uppercase hex', () => {

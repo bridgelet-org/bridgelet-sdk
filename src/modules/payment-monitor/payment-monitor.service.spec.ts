@@ -148,23 +148,21 @@ describe('PaymentMonitorService', () => {
 
   describe('onModuleInit / onModuleDestroy', () => {
     it('starts a setInterval on init and clears it on destroy', () => {
+      const intervalHandle = setInterval(() => undefined, 1_000);
+      clearInterval(intervalHandle);
+
       const setIntervalSpy = jest
         .spyOn(global, 'setInterval')
-        .mockReturnValue(123 as any);
+        .mockReturnValue(intervalHandle);
       const clearIntervalSpy = jest
         .spyOn(global, 'clearInterval')
         .mockImplementation(() => undefined);
 
-      // Use real implementation for this test
-      jest.restoreAllMocks();
-      jest.spyOn(global, 'setInterval').mockReturnValue(123 as any);
-      jest.spyOn(global, 'clearInterval').mockImplementation(() => undefined);
-
       service.onModuleInit();
-      expect(setInterval).toHaveBeenCalledTimes(1);
+      expect(setIntervalSpy).toHaveBeenCalledTimes(1);
 
       service.onModuleDestroy();
-      expect(clearInterval).toHaveBeenCalledWith(123);
+      expect(clearIntervalSpy).toHaveBeenCalledWith(intervalHandle);
 
       setIntervalSpy.mockRestore();
       clearIntervalSpy.mockRestore();
