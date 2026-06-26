@@ -3,12 +3,14 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { NotFoundException } from '@nestjs/common';
+import { getToken } from '@willsoto/nestjs-prometheus';
 import { AccountsService } from './accounts.service.js';
 import { Account } from './entities/account.entity.js';
 import { StellarService } from '../stellar/stellar.service.js';
 import { WebhooksService } from '../webhooks/webhooks.service.js';
 import { AccountStatus } from './enums/account-status.enum.js';
 import { CreateAccountDto } from './dto/create-account.dto.js';
+import { AccountLatencyMetricsProvider } from './providers/account-latency-metrics.provider.js';
 
 const VALID_KEY = 'G' + 'A'.repeat(55);
 const VALID_KEY2 = 'G' + 'B'.repeat(55);
@@ -34,6 +36,7 @@ const mockConfigService = {
     const cfg: Record<string, string> = {
       'stellar.encryptionKey': 'a'.repeat(64),
       'stellar.contracts.ephemeralAccount': 'CONTRACT123',
+      'stellar.contracts.sweepController': 'CONTRACT456',
     };
     const v = cfg[key];
     if (!v) throw new Error(`Config key not found: ${key}`);
@@ -90,6 +93,11 @@ describe('AccountsService', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: WebhooksService, useValue: mockWebhooksService },
+        AccountLatencyMetricsProvider,
+        {
+          provide: getToken('account_creation_total'),
+          useValue: { inc: jest.fn() },
+        },
       ],
     }).compile();
 

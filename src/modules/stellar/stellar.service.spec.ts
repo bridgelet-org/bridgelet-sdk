@@ -186,6 +186,7 @@ describe('StellarService', () => {
       expiresIn: 3600,
       recoveryAddress: FUNDING_KEYPAIR.publicKey(),
       contractId: CONTRACT_ID,
+      sweepControllerContractId: CONTRACT_ID,
       fundingKeypairSecret: FUNDING_SECRET,
     };
 
@@ -527,6 +528,7 @@ describe('StellarService', () => {
           expiresIn: 3600,
           recoveryAddress: FUNDING_KEYPAIR.publicKey(),
           contractId: CONTRACT_ID,
+          sweepControllerContractId: CONTRACT_ID,
           fundingKeypairSecret: FUNDING_SECRET,
         }),
       ).rejects.toThrow('not confirmed after');
@@ -565,6 +567,7 @@ describe('StellarService', () => {
           expiresIn: 3600,
           recoveryAddress: FUNDING_KEYPAIR.publicKey(),
           contractId: CONTRACT_ID,
+          sweepControllerContractId: CONTRACT_ID,
           fundingKeypairSecret: FUNDING_SECRET,
         }),
       ).rejects.toThrow('failed on-chain');
@@ -598,6 +601,10 @@ describe('StellarService', () => {
                 return cfg[key];
               },
             },
+          },
+          {
+            provide: getToken('soroban_rpc_latency_seconds'),
+            useValue: { startTimer: jest.fn(() => jest.fn()) },
           },
         ],
       }).compile();
