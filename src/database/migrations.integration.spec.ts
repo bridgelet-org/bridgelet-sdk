@@ -9,6 +9,8 @@ type MigrationCheckResult = {
   executedMigrationNames: string[];
   foreignKeyColumns: string[][];
   foreignKeyRejected: boolean;
+  contractEventColumns: string[];
+  contractEventInsertSucceeded: boolean;
   deliveryForeignKeyColumns: string[][];
   deliveryForeignKeyRejected: boolean;
   deliveryIndexes: string[][];
@@ -20,17 +22,11 @@ describe('Database migrations integration', () => {
   jest.setTimeout(180_000);
 
   let result: MigrationCheckResult;
-  const tsNodeRegisterImport =
-    'data:text/javascript,import { register } from "node:module"; import { pathToFileURL } from "node:url"; register("ts-node/esm/transpile-only", pathToFileURL("./"));';
 
   beforeAll(async () => {
     const { stdout } = await execFileAsync(
       process.execPath,
-      [
-        '--import',
-        tsNodeRegisterImport,
-        './test/migrations.integration.runner.ts',
-      ],
+      ['--loader', 'ts-node/esm', './test/migrations.integration.runner.ts'],
       {
         cwd: process.cwd(),
       },
@@ -40,11 +36,21 @@ describe('Database migrations integration', () => {
   });
 
   it('applies every migration, matches entity metadata, and enforces foreign keys', () => {
-    expect(result.executedMigrationNames).toHaveLength(7);
+    expect(result.executedMigrationNames).toHaveLength(8);
     expect(result.schemaInSync).toBe(true);
     expect(result.enumValues).toEqual(Object.values(AccountStatus));
     expect(result.foreignKeyColumns).toContainEqual(['accountId']);
     expect(result.foreignKeyRejected).toBe(true);
+    expect(result.contractEventColumns).toEqual([
+      'id',
+      'event_type',
+      'contract_address',
+      'ledger_sequence',
+      'tx_hash',
+      'payload',
+      'created_at',
+    ]);
+    expect(result.contractEventInsertSucceeded).toBe(true);
     expect(result.deliveryForeignKeyColumns).toContainEqual([
       'subscription_id',
     ]);

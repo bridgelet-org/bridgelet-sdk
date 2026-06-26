@@ -8,6 +8,7 @@ The current schema is created entirely through the migrations in `src/database/m
 - `claims`: stores completed claim records and references `accounts.id` through a cascading foreign key on `accountId`.
 - `webhooks`: stores outbound webhook subscriptions.
 - `webhook_deliveries`: stores per-delivery webhook attempts, including the subscribed webhook reference (`subscription_id`), event type, payload hash, retry count, last response details, delivery timestamp, and creation timestamp. It references `webhooks.id` with `ON DELETE CASCADE` and has a composite index on (`subscription_id`, `created_at`).
+- `contract_events`: stores indexed Soroban contract events, including event type, contract address, ledger sequence, transaction hash, event payload, and creation timestamp.
 
 ## Account Status Enum
 
@@ -78,4 +79,5 @@ Settings are passed to the underlying `pg` Pool constructor via the TypeORM `ext
 
 1. The resulting schema matches TypeORM entity metadata (`schemaInSync: true`).
 2. The `claims.accountId` and `webhook_deliveries.subscription_id` foreign keys are enforced (inserts with orphan UUIDs are rejected).
-3. The three high-traffic composite/standalone indexes exist after migration 1718100006000.
+3. The three high-traffic composite/standalone indexes exist after migration `1718100006000`.
+4. The `contract_events` table exists with the expected columns and accepts inserts after migration `1718100007000`.

@@ -7,6 +7,7 @@ import EmbeddedPostgres from 'embedded-postgres';
 import { DataSource } from 'typeorm';
 import { Account } from '../src/modules/accounts/entities/account.entity.js';
 import { Claim } from '../src/modules/claims/entities/claim.entity.js';
+import { ContractEvent } from '../src/modules/stellar/entities/contract-event.entity.js';
 import { WebhookDelivery } from '../src/modules/webhooks/entities/webhook-delivery.entity.js';
 import { Webhook } from '../src/modules/webhooks/entities/webhook.entity.js';
 import { CreateAccountsTable1718100000000 } from '../src/database/migrations/1718100000000-CreateAccountsTable.js';
@@ -16,6 +17,7 @@ import { CreateWebhooksTable1718100003000 } from '../src/database/migrations/171
 import { AddClaimingToAccountStatus1718100004000 } from '../src/database/migrations/1718100004000-AddClaimingToAccountStatus.js';
 import { CreateWebhookDeliveriesTable1718100005000 } from '../src/database/migrations/1718100005000-CreateWebhookDeliveriesTable.js';
 import { AddHighTrafficIndexes1718100006000 } from '../src/database/migrations/1718100006000-AddHighTrafficIndexes.js';
+import { CreateContractEventsTable1718100007000 } from '../src/database/migrations/1718100007000-CreateContractEventsTable.js';
 
 const postgresUser = 'postgres';
 const postgresPassword = 'postgres';
@@ -29,6 +31,7 @@ const migrations = [
   AddClaimingToAccountStatus1718100004000,
   CreateWebhookDeliveriesTable1718100005000,
   AddHighTrafficIndexes1718100006000,
+  CreateContractEventsTable1718100007000,
 ];
 
 type SqlInMemoryLog = {
@@ -98,7 +101,7 @@ async function main(): Promise<void> {
       username: postgresUser,
       password: postgresPassword,
       database: postgresDatabase,
-      entities: [Account, Claim, Webhook, WebhookDelivery],
+      entities: [Account, Claim, Webhook, WebhookDelivery, ContractEvent],
       migrations,
       migrationsTransactionMode: 'each',
       synchronize: false,
@@ -126,7 +129,9 @@ async function main(): Promise<void> {
 
     const queryRunner = dataSource.createQueryRunner();
     let foreignKeyColumns: string[][] = [];
+    let contractEventColumns: string[] = [];
     let foreignKeyRejected = false;
+    let contractEventInsertSucceeded = false;
     let deliveryForeignKeyColumns: string[][] = [];
     let deliveryForeignKeyRejected = false;
     let deliveryIndexes: string[][] = [];
@@ -145,6 +150,10 @@ async function main(): Promise<void> {
         ) ?? [];
       deliveryIndexes =
         webhookDeliveriesTable?.indices.map((index) => index.columnNames) ?? [];
+
+      const contractEventsTable = await queryRunner.getTable('contract_events');
+      contractEventColumns =
+        contractEventsTable?.columns.map((column) => column.name) ?? [];
     } finally {
       await queryRunner.release();
     }
@@ -194,7 +203,27 @@ async function main(): Promise<void> {
         typeof error === 'object' && error !== null && pgError.code === '23503';
     }
 
-    // Verify the three high-traffic indexes added by migration 1718100006000
+    await dataSource.query(
+      `
+        INSERT INTO "contract_events" (
+          "event_type",
+          "contract_address",
+          "ledger_sequence",
+          "tx_hash",
+          "payload"
+        )
+        VALUES ($1, $2, $3, $4, $5::jsonb)
+      `,
+      [
+        'transfer',
+        'CBKQ7J6M7YJQ4ZQOZ6M7K6F5Y5N7D7C6B5A4Z3Y2X1W0V9U8T7S6R5Q4',
+        12345,
+        'b'.repeat(64),
+        JSON.stringify({ amount: '1.0000000', asset: 'USDC' }),
+      ],
+    );
+    contractEventInsertSucceeded = true;
+
     const indexRows: IndexRow[] = await dataSource.query(`
       SELECT indexname
       FROM pg_indexes
@@ -214,6 +243,8 @@ async function main(): Promise<void> {
         executedMigrationNames: executedMigrations.map(({ name }) => name),
         foreignKeyColumns,
         foreignKeyRejected,
+        contractEventColumns,
+        contractEventInsertSucceeded,
         deliveryForeignKeyColumns,
         deliveryForeignKeyRejected,
         deliveryIndexes,

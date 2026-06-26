@@ -41,6 +41,9 @@ const mockTxResult = {
 
 describe('SweepsService', () => {
   let service: SweepsService;
+  type SweepStatusResult = Awaited<
+    ReturnType<ValidationProvider['getSweepStatus']>
+  >;
 
   let validationProvider: {
     validateSweepParameters: jest.Mock<() => Promise<any>>;
@@ -291,10 +294,11 @@ describe('SweepsService', () => {
 
   describe('getSweepStatus', () => {
     it('delegates to ValidationProvider', async () => {
-      validationProvider.getSweepStatus.mockResolvedValue({
+      const sweepStatus: SweepStatusResult = {
         canSweep: false,
         reason: 'expired',
-      } as any);
+      };
+      validationProvider.getSweepStatus.mockResolvedValue(sweepStatus);
       const result = await service.getSweepStatus('account-id');
       expect(validationProvider.getSweepStatus).toHaveBeenCalledWith(
         'account-id',
