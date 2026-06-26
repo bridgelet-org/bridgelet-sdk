@@ -64,9 +64,6 @@ describe('HealthController', () => {
     let controller: HealthController;
 
     beforeEach(async () => {
-      // Simulate a query that never resolves within the health-check window.
-      // We use a jest fake timer to advance time past DB_HEALTH_TIMEOUT_MS so
-      // the internal setTimeout fires without making the test actually wait.
       jest.useFakeTimers();
 
       const module = await buildModule({
