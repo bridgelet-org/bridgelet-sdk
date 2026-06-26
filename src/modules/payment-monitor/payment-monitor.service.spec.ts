@@ -78,6 +78,9 @@ jest.mock('@stellar/stellar-sdk', () => {
 
 describe('PaymentMonitorService', () => {
   let service: PaymentMonitorService;
+  let onModuleInitSpy: jest.SpiedFunction<
+    PaymentMonitorService['onModuleInit']
+  >;
   let stellarService: {
     recordPayment: jest.MockedFunction<StellarService['recordPayment']>;
   };
@@ -130,7 +133,9 @@ describe('PaymentMonitorService', () => {
     stellarService = module.get(StellarService);
 
     // Prevent the real interval from starting in tests
-    jest.spyOn(service, 'onModuleInit').mockImplementation(() => undefined);
+    onModuleInitSpy = jest
+      .spyOn(service, 'onModuleInit')
+      .mockImplementation(() => undefined);
 
     // Bypass real Stellar asset validation — not under test here
     jest
@@ -148,6 +153,8 @@ describe('PaymentMonitorService', () => {
 
   describe('onModuleInit / onModuleDestroy', () => {
     it('starts a setInterval on init and clears it on destroy', () => {
+      onModuleInitSpy.mockRestore();
+
       const intervalHandle = setInterval(() => undefined, 1_000);
       clearInterval(intervalHandle);
 
