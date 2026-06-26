@@ -12,6 +12,9 @@ import { AccountStatus } from './enums/account-status.enum.js';
 import { SecretEncryptionUtil } from '../../common/crypto/secret-encryption.util.js';
 import { WebhooksService } from '../webhooks/webhooks.service.js';
 import { sanitizeMetadata } from '../../common/utils/metadata-sanitizer.util.js';
+import { InjectMetric } from '@willsoto/nestjs-prometheus';
+import { Counter } from 'prom-client';
+import { AccountLatencyMetricsProvider } from './providers/account-latency-metrics.provider.js';
 
 /**
  * AccountsService — Service-Level Documentation & Contributor Guidance
@@ -101,6 +104,9 @@ export class AccountsService {
     private jwtService: JwtService,
     private stellarService: StellarService,
     private webhooksService: WebhooksService,
+    @InjectMetric('account_creation_total')
+    private readonly accountCreationCounter: Counter<string>,
+    private latencyMetrics: AccountLatencyMetricsProvider,
   ) {
     this.encryptionKey = this.configService.getOrThrow<string>(
       'stellar.encryptionKey',
@@ -110,6 +116,8 @@ export class AccountsService {
   public async create(
     createAccountDto: CreateAccountDto,
   ): Promise<AccountResponseDto> {
+    this.accountCreationCounter.inc();
+    const startMs = Date.now();
     // Generate ephemeral keypair
     const ephemeralKeypair = this.stellarService.generateKeypair();
 
@@ -177,6 +185,8 @@ export class AccountsService {
         expiresAt: account.expiresAt,
       });
 
+      this.latencyMetrics.record(Date.now() - startMs, true);
+
       return {
         accountId: account.id,
         publicKey: account.publicKey,
@@ -189,6 +199,8 @@ export class AccountsService {
         createdAt: account.createdAt,
       };
     } catch (error: unknown) {
+      this.latencyMetrics.record(Date.now() - startMs, false);
+
       // Mark as FAILED so the record is traceable but clearly broken
       account.status = AccountStatus.FAILED;
       await this.accountsRepository.save(account);
