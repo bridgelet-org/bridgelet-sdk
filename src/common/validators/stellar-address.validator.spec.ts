@@ -9,6 +9,7 @@ describe('StellarAddressValidator', () => {
   const wrongLength = 'GDV3BRGE2BXK5JMGAEDGE5QWAY2DBK5V2KEG762Y5GH4LPC5RSPRPTT'; // Too short
   const invalidChecksum =
     'GDV3BRGE2BXK5JMGAEDGE5QWAY2DBK5V2KEG762Y5GH4LPC5RSPRPTTA'; // Tampered last char
+  const isValidLoose = StellarAddressValidator.isValid;
 
   describe('isValid', () => {
     it('should return true for a valid address', () => {
@@ -32,8 +33,8 @@ describe('StellarAddressValidator', () => {
     });
 
     it('should return false for undefined or null inputs', () => {
-      expect(StellarAddressValidator.isValid(undefined as any)).toBe(false);
-      expect(StellarAddressValidator.isValid(null as any)).toBe(false);
+      expect(isValidLoose(undefined)).toBe(false);
+      expect(isValidLoose(null)).toBe(false);
     });
   });
 

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as StellarSdk from '@stellar/stellar-sdk';
 import { rpc as SorobanRpc } from '@stellar/stellar-sdk';
 import { StellarService, EXPIRY_BUFFER_LEDGERS } from './stellar.service.js';
+import { getToken } from '@willsoto/nestjs-prometheus';
 
 const mockConfigService = {
   getOrThrow: (key: string): string => {
@@ -70,6 +71,10 @@ describe('StellarService', () => {
       providers: [
         StellarService,
         { provide: ConfigService, useValue: mockConfigService },
+        {
+          provide: getToken('soroban_rpc_latency_seconds'),
+          useValue: { startTimer: jest.fn(() => jest.fn()) },
+        },
       ],
     }).compile();
 

@@ -113,6 +113,10 @@ cp .env.example .env
 #   1718100001000-CreateClaimsTable              (claims table + FK to accounts)
 #   1718100002000-AddInitializingToAccountStatus (adds INITIALIZING to account_status enum)
 #   1718100003000-CreateWebhooksTable            (webhooks table)
+#   1718100004000-AddClaimingToAccountStatus     (adds CLAIMING to account_status enum)
+#   1718100005000-CreateWebhookDeliveriesTable   (webhook delivery attempt log table)
+#   1718100006000-AddHighTrafficIndexes          (accounts composite and range indexes)
+#   1718100007000-CreateContractEventsTable      (Soroban contract event index table)
 npm run migration:run
 
 # Start development server
@@ -140,6 +144,8 @@ npm run test:cov
 ```
 
 Coverage reports are generated in the `coverage/` directory. The build will fail if any metric (branches, functions, lines, statements) falls below 80%.
+
+The repository also includes an embedded-Postgres integration test in `src/database/migrations.integration.spec.ts` that starts a fresh PostgreSQL instance, runs all current migrations, verifies the resulting schema matches the TypeORM entities, checks the `account_status_enum` values, confirms the `claims.accountId -> accounts.id` and `webhook_deliveries.subscription_id -> webhooks.id` foreign keys are enforced, verifies the high-traffic `accounts` indexes added by migration `1718100006000`, and verifies the `contract_events` table shape.
 
 To check coverage for a specific file:
 

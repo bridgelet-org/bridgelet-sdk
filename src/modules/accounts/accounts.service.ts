@@ -11,6 +11,10 @@ import { ConfigService } from '@nestjs/config';
 import { AccountStatus } from './enums/account-status.enum.js';
 import { SecretEncryptionUtil } from '../../common/crypto/secret-encryption.util.js';
 import { WebhooksService } from '../webhooks/webhooks.service.js';
+import { sanitizeMetadata } from '../../common/utils/metadata-sanitizer.util.js';
+import { InjectMetric } from '@willsoto/nestjs-prometheus';
+import { Counter } from 'prom-client';
+import { AccountLatencyMetricsProvider } from './providers/account-latency-metrics.provider.js';
 
 /**
  * AccountsService — Service-Level Documentation & Contributor Guidance
@@ -100,6 +104,9 @@ export class AccountsService {
     private jwtService: JwtService,
     private stellarService: StellarService,
     private webhooksService: WebhooksService,
+    @InjectMetric('account_creation_total')
+    private readonly accountCreationCounter: Counter<string>,
+    private latencyMetrics: AccountLatencyMetricsProvider,
   ) {
     this.encryptionKey = this.configService.getOrThrow<string>(
       'stellar.encryptionKey',
@@ -109,6 +116,8 @@ export class AccountsService {
   public async create(
     createAccountDto: CreateAccountDto,
   ): Promise<AccountResponseDto> {
+    this.accountCreationCounter.inc();
+    const startMs = Date.now();
     // Generate ephemeral keypair
     const ephemeralKeypair = this.stellarService.generateKeypair();
 
@@ -124,6 +133,12 @@ export class AccountsService {
       .update(claimToken)
       .digest('hex');
 
+    // Derive combined asset string from asset_code + asset_issuer when provided
+    const asset =
+      createAccountDto.asset_code && createAccountDto.asset_issuer
+        ? `${createAccountDto.asset_code}:${createAccountDto.asset_issuer}`
+        : (createAccountDto.asset_code ?? 'native');
+
     // Save with INITIALIZING status first so we have a DB record for cleanup
     // if the Stellar/contract steps fail
     const account = this.accountsRepository.create({
@@ -134,11 +149,11 @@ export class AccountsService {
       ),
       fundingSource: createAccountDto.fundingSource,
       amount: createAccountDto.amount,
-      asset: createAccountDto.asset,
+      asset,
       status: AccountStatus.INITIALIZING,
       claimTokenHash,
       expiresAt,
-      metadata: createAccountDto.metadata,
+      metadata: sanitizeMetadata(createAccountDto.metadata),
     });
 
     await this.accountsRepository.save(account);
@@ -147,11 +162,14 @@ export class AccountsService {
       const txHash = await this.stellarService.createEphemeralAccount({
         publicKey: ephemeralKeypair.publicKey(),
         amount: createAccountDto.amount,
-        asset: createAccountDto.asset,
+        asset,
         expiresIn: createAccountDto.expiresIn,
-        recoveryAddress: createAccountDto.fundingSource,
+        recoveryAddress: createAccountDto.recovery_address,
         contractId: this.configService.getOrThrow<string>(
           'stellar.contracts.ephemeralAccount',
+        ),
+        sweepControllerContractId: this.configService.getOrThrow<string>(
+          'stellar.contracts.sweepController',
         ),
       });
 
@@ -167,6 +185,8 @@ export class AccountsService {
         expiresAt: account.expiresAt,
       });
 
+      this.latencyMetrics.record(Date.now() - startMs, true);
+
       return {
         accountId: account.id,
         publicKey: account.publicKey,
@@ -179,6 +199,8 @@ export class AccountsService {
         createdAt: account.createdAt,
       };
     } catch (error: unknown) {
+      this.latencyMetrics.record(Date.now() - startMs, false);
+
       // Mark as FAILED so the record is traceable but clearly broken
       account.status = AccountStatus.FAILED;
       await this.accountsRepository.save(account);
