@@ -10,6 +10,7 @@ import { AccountStatus } from '../../accounts/enums/account-status.enum.js';
 import { ConfigService } from '@nestjs/config';
 import { SecretEncryptionUtil } from '../../../common/crypto/secret-encryption.util.js';
 import { WebhooksService } from '../../webhooks/webhooks.service.js';
+import { ClaimAuditProvider } from './claim-audit.provider.js';
 
 describe('ClaimRedemptionProvider', () => {
   let provider: ClaimRedemptionProvider;
@@ -142,6 +143,10 @@ describe('ClaimRedemptionProvider', () => {
           },
         },
         { provide: WebhooksService, useValue: mockWebhooksService },
+        {
+          provide: ClaimAuditProvider,
+          useValue: { record: jest.fn().mockResolvedValue(undefined) },
+        },
       ],
     }).compile();
 
