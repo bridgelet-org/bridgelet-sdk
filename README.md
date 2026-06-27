@@ -191,6 +191,8 @@ POST /claims/initiate # Generate claim token
 POST /claims/redeem # Redeem claim and sweep
 GET /webhooks # List webhook subscriptions
 POST /webhooks # Subscribe to events
+PUT /webhooks/:id       # Update webhook subscription (e.g. URL, events)
+DELETE /webhooks/:id      # Delete webhook subscription
 
 ## Database Schema
 
