@@ -78,8 +78,8 @@ export class ClaimRedemptionProvider {
 
     // Atomically acquire the claim slot using SELECT FOR UPDATE.
     // This prevents concurrent requests from both passing the status check.
-    const account = await this.dataSource.transaction(
-      async (manager: EntityManager) => {
+    const { locked: account, wasPartialOnEntry } =
+      await this.dataSource.transaction(async (manager: EntityManager) => {
         const locked = await manager
           .createQueryBuilder(Account, 'account')
           .setLock('pessimistic_write')
@@ -91,19 +91,31 @@ export class ClaimRedemptionProvider {
         }
 
         if (locked.status === AccountStatus.CLAIMED) {
-          return locked;
+          return { locked, wasPartialOnEntry: false };
         }
 
         if (locked.status === AccountStatus.CLAIMING) {
           throw new ConflictException('Claim is already being processed');
         }
 
+        // Allow PENDING_CLAIM (fresh attempt) and PARTIAL_SWEEP (retry of a
+        // contract-was-Swept-but-payment-failed prior attempt). Any other
+        // status is rejected.
+        if (
+          locked.status !== AccountStatus.PENDING_CLAIM &&
+          locked.status !== AccountStatus.PARTIAL_SWEEP
+        ) {
+          throw new BadRequestException(
+            `Account cannot be redeemed. Status: ${locked.status}`,
+          );
+        }
+
+        const wasPartial = locked.status === AccountStatus.PARTIAL_SWEEP;
         locked.status = AccountStatus.CLAIMING;
         locked.destinationAddress = destinationAddress;
         await manager.save(locked);
-        return locked;
-      },
-    );
+        return { locked, wasPartialOnEntry: wasPartial };
+      });
 
     // Idempotent response for already-claimed account
     if (account.status === AccountStatus.CLAIMED) {
@@ -138,9 +150,53 @@ export class ClaimRedemptionProvider {
         destinationAddress,
         amount: account.amount,
         asset: account.asset,
+        // PARTIAL_SWEEP retry: contract is already in Swept state from the
+        // prior partial failure, so re-invoking execute_sweep would revert.
+        // Skip steps 2-3 and only re-submit the Horizon payment.
+        skipContractAuth: wasPartialOnEntry,
       });
 
-      TransactionHashValidator.assertValid(sweepResult.txHash);
+      // PARTIAL SWEEP path: contract authorized but Horizon payment failed.
+      // Mark the account so a future redemption attempt can retry the payment
+      // (with skipContractAuth=true). Surface this as a non-error response
+      // (status=200, success=false, isPartial=true) so callers can decide.
+      if (sweepResult.isPartial) {
+        await this.accountsRepository.update(account.id, {
+          status: AccountStatus.PARTIAL_SWEEP,
+          destinationAddress: '',
+        });
+
+        await this.claimAuditProvider.record({
+          accountId: account.id,
+          destination: destinationAddress,
+          ip,
+          outcome: 'partial',
+          failureReason: sweepResult.error ?? 'unknown',
+        });
+
+        await this.webhooksService.triggerEvent('sweep.partial', {
+          accountId: account.id,
+          amount: account.amount,
+          asset: account.asset,
+          destination: destinationAddress,
+          error: sweepResult.error,
+          contractAuthHash: sweepResult.contractAuthHash,
+        });
+
+        return {
+          success: false,
+          isPartial: true,
+          contractAuthHash: sweepResult.contractAuthHash,
+          amountSwept: account.amount,
+          asset: account.asset,
+          destination: destinationAddress,
+          error: sweepResult.error,
+          message:
+            'Sweep partially completed: contract authorized but Horizon payment failed. Retry with the same token.',
+        };
+      }
+
+      TransactionHashValidator.assertValid(sweepResult.txHash as string);
 
       // Atomically record the claim and mark account as CLAIMED
       const claim = await this.dataSource.transaction(
@@ -152,7 +208,7 @@ export class ClaimRedemptionProvider {
           const newClaim = manager.create(Claim, {
             accountId: account.id,
             destinationAddress,
-            sweepTxHash: sweepResult.txHash,
+            sweepTxHash: sweepResult.txHash as string,
             amountSwept: account.amount,
             asset: account.asset,
             claimedAt: account.claimedAt,
@@ -189,9 +245,16 @@ export class ClaimRedemptionProvider {
         sweptAt: claim.claimedAt,
       };
     } catch (error) {
-      // Revert from CLAIMING back to PENDING_CLAIM so the user can retry
+      // Revert from CLAIMING. On a retry that began in PARTIAL_SWEEP we
+      // preserve the contract-is-Swept invariant by leaving the account
+      // in PARTIAL_SWEEP — the contract is already authorized, so
+      // settling-back to PENDING_CLAIM would invalidate that. Otherwise
+      // revert to PENDING_CLAIM so the user can retry.
+      const revertStatus = wasPartialOnEntry
+        ? AccountStatus.PARTIAL_SWEEP
+        : AccountStatus.PENDING_CLAIM;
       await this.accountsRepository.update(account.id, {
-        status: AccountStatus.PENDING_CLAIM,
+        status: revertStatus,
         destinationAddress: '',
       });
 

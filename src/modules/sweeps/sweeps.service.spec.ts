@@ -250,7 +250,7 @@ describe('SweepsService', () => {
       );
     });
 
-    it('logs a CRITICAL error when the Horizon payment fails after contract authorization', async () => {
+    it('returns isPartial: true (does NOT throw) when Horizon payment fails after contract authorization', async () => {
       const horizonError = new Error('Horizon payment failed');
       transactionProvider.executeSweepTransaction.mockRejectedValue(
         horizonError,
@@ -261,18 +261,76 @@ describe('SweepsService', () => {
         .spyOn(service['logger'], 'error')
         .mockImplementation(() => {});
 
-      await expect(service.executeSweep(validRequest)).rejects.toThrow(
-        'Horizon payment failed',
-      );
+      // The sweeper no longer throws — it returns a structured partial
+      // result so the orchestrator can transition the account to PARTIAL_SWEEP
+      // and emit a sweep.partial webhook.
+      const result = await service.executeSweep(validRequest);
 
+      expect(result.success).toBe(false);
+      expect(result.isPartial).toBe(true);
+      expect(result.error).toBe('Horizon payment failed');
+      expect(result.contractAuthHash).toBe(MOCK_CONTRACT_AUTH_HASH);
+      expect(result.amountSwept).toBe(validRequest.amount);
+      expect(result.destination).toBe(validRequest.destinationAddress);
+      expect(result.txHash).toBeUndefined();
+      expect(result.timestamp).toBeUndefined();
+
+      // The log line is now PARTIAL (not CRITICAL) to distinguish recoverable
+      // vs fatal in monitoring.
       expect(loggerErrorSpy).toHaveBeenCalledWith(
-        expect.stringContaining('CRITICAL'),
+        expect.stringContaining('PARTIAL sweep'),
         horizonError.stack,
       );
       expect(loggerErrorSpy).toHaveBeenCalledWith(
         expect.stringContaining(validRequest.accountId),
         horizonError.stack,
       );
+    });
+
+    it('skips contract auth + execute_sweep when skipContractAuth=true; only runs Horizon payment', async () => {
+      await service.executeSweep({
+        ...validRequest,
+        skipContractAuth: true,
+      });
+
+      expect(contractProvider.generateAuthSignature).not.toHaveBeenCalled();
+      expect(stellarService.executeSweep).not.toHaveBeenCalled();
+      // The Horizon payment still runs to retry the failed payment.
+      expect(transactionProvider.executeSweepTransaction).toHaveBeenCalledWith({
+        ephemeralSecret: validRequest.ephemeralSecret,
+        destinationAddress: validRequest.destinationAddress,
+        amount: validRequest.amount,
+        asset: validRequest.asset,
+      });
+    });
+
+    it('returns a success result with txHash when skipContractAuth=true and the Horizon payment succeeds', async () => {
+      const result = await service.executeSweep({
+        ...validRequest,
+        skipContractAuth: true,
+      });
+
+      expect(result.isPartial).toBeUndefined();
+      expect(result.success).toBe(true);
+      expect(result.txHash).toBe(MOCK_TX_HASH);
+      expect(result.contractAuthHash).toBe(MOCK_CONTRACT_AUTH_HASH);
+    });
+
+    it('returns isPartial: true when skipContractAuth=true but the Horizon payment still fails', async () => {
+      transactionProvider.executeSweepTransaction.mockRejectedValue(
+        new Error('Horizon offline'),
+      );
+
+      const result = await service.executeSweep({
+        ...validRequest,
+        skipContractAuth: true,
+      });
+
+      expect(result.isPartial).toBe(true);
+      expect(result.error).toBe('Horizon offline');
+      // Skipped contract side did NOT happen.
+      expect(contractProvider.generateAuthSignature).not.toHaveBeenCalled();
+      expect(stellarService.executeSweep).not.toHaveBeenCalled();
     });
   });
 

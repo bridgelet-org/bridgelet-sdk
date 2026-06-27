@@ -55,39 +55,63 @@ export class SweepsService {
       sweepExecutionRequest,
     );
 
-    // Step 2: Generate authorization signature for the contract call
-    const authSignature = this.contractProvider.generateAuthSignature({
-      ephemeralPublicKey: sweepExecutionRequest.ephemeralPublicKey,
-      destinationAddress: sweepExecutionRequest.destinationAddress,
-    });
+    // Steps 2 & 3: Smart-contract authorization.
+    // On a retry into PARTIAL_SWEEP the contract is already in Swept state
+    // and re-invoking execute_sweep would revert on-chain. The orchestrator
+    // (ClaimRedemptionProvider) signals this via skipContractAuth: true and
+    // we synthesise the auth hash deterministically from the same inputs
+    // for audit-trail purposes.
+    let contractAuthHash: string;
+    if (sweepExecutionRequest.skipContractAuth) {
+      this.logger.log(
+        `Skip-contract-auth retry for account ${sweepExecutionRequest.accountId}: ` +
+          'contract already in Swept state from prior partial failure.',
+      );
+      contractAuthHash = this.contractProvider.generateAuthHash(
+        sweepExecutionRequest.ephemeralPublicKey,
+        sweepExecutionRequest.destinationAddress,
+      );
+    } else {
+      // Step 2: Generate authorization signature for the contract call
+      const authSignature = this.contractProvider.generateAuthSignature({
+        ephemeralPublicKey: sweepExecutionRequest.ephemeralPublicKey,
+        destinationAddress: sweepExecutionRequest.destinationAddress,
+      });
 
-    // Step 3: Submit execute_sweep() on the SweepController Soroban contract
-    const sweepControllerContractId = this.configService.getOrThrow<string>(
-      'stellar.contracts.sweepController',
-    );
-    const ephemeralAccountContractId = this.configService.getOrThrow<string>(
-      'stellar.contracts.ephemeralAccount',
-    );
+      // Step 3: Submit execute_sweep() on the SweepController Soroban contract
+      const sweepControllerContractId = this.configService.getOrThrow<string>(
+        'stellar.contracts.sweepController',
+      );
+      const ephemeralAccountContractId = this.configService.getOrThrow<string>(
+        'stellar.contracts.ephemeralAccount',
+      );
 
-    await this.stellarService.executeSweep({
-      sweepControllerContractId,
-      ephemeralAccountContractId,
-      destination: sweepExecutionRequest.destinationAddress,
-      authSignature,
-      signerSecret: sweepExecutionRequest.ephemeralSecret,
-    });
+      await this.stellarService.executeSweep({
+        sweepControllerContractId,
+        ephemeralAccountContractId,
+        destination: sweepExecutionRequest.destinationAddress,
+        authSignature,
+        signerSecret: sweepExecutionRequest.ephemeralSecret,
+      });
 
-    this.logger.log(
-      `Contract sweep authorized for account ${sweepExecutionRequest.accountId}`,
-    );
+      this.logger.log(
+        `Contract sweep authorized for account ${sweepExecutionRequest.accountId}`,
+      );
 
-    // Compute auth hash before Step 4 so it's available in the catch block
-    const contractAuthHash = this.contractProvider.generateAuthHash(
-      sweepExecutionRequest.ephemeralPublicKey,
-      sweepExecutionRequest.destinationAddress,
-    );
+      contractAuthHash = this.contractProvider.generateAuthHash(
+        sweepExecutionRequest.ephemeralPublicKey,
+        sweepExecutionRequest.destinationAddress,
+      );
+    }
 
-    // Step 4: Execute the classic Horizon payment to move funds
+    // Step 4: Execute the classic Horizon payment to move funds.
+    // We catch errors here and return a structured partial result
+    // (isPartial: true) instead of propagating them: the contract may
+    // already be in Swept state by this point and a thrown exception
+    // would force the orchestrator into a manual recovery flow.
+    // Returning isPartial lets the caller transition the account to
+    // PARTIAL_SWEEP and emit a sweep.partial webhook so a retry
+    // redemption (or an operator) can pick up the work.
     let transactionResult: TransactionResult;
     try {
       transactionResult =
@@ -100,16 +124,23 @@ export class SweepsService {
       this.sweepSuccessCounter.inc();
     } catch (error) {
       this.sweepFailureCounter.inc();
-      // Contract is now in Swept state but funds did not move.
-      // This requires manual recovery — log with full context.
+      const message = error instanceof Error ? error.message : String(error);
+      const stack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
-        `CRITICAL: Contract authorized but transaction failed for account ` +
-          `${sweepExecutionRequest.accountId}. Contract auth hash: ${contractAuthHash}. ` +
-          `Error: ${(error as Error).message}`,
-        (error as Error).stack,
+        `PARTIAL sweep: contract authorized but Horizon payment failed for ` +
+          `account ${sweepExecutionRequest.accountId}. Contract auth hash: ` +
+          `${contractAuthHash}. Error: ${message}`,
+        stack,
       );
       this.sweepMetrics.recordFailed();
-      throw error;
+      return {
+        success: false,
+        isPartial: true,
+        contractAuthHash,
+        amountSwept: sweepExecutionRequest.amount,
+        destination: sweepExecutionRequest.destinationAddress,
+        error: message,
+      };
     }
 
     this.logger.log(`Sweep complete: txHash=${transactionResult.hash}`);
