@@ -234,10 +234,12 @@ export class AccountsService {
     limit: number;
     offset: number;
   }): Promise<{ accounts: AccountResponseDto[]; total: number }> {
-    const query = this.accountsRepository.createQueryBuilder('account');
+   const query = this.accountsRepository
+      .createQueryBuilder('account')
+      .where('account.deletedAt IS NULL');
 
     if (status) {
-      query.where('account.status = :status', { status });
+      query.andWhere('account.status = :status', { status });
     }
 
     query.skip(offset).take(Math.min(limit, 100));

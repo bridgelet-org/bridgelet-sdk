@@ -77,6 +77,7 @@ describe('ClaimRedemptionProvider', () => {
     const qb = {
       setLock: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
+      andWhere: jest.fn().mockReturnThis(),
       getOne: jest.fn().mockResolvedValue(lockedAccount),
     };
     return {

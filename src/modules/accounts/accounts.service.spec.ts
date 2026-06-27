@@ -235,6 +235,7 @@ describe('AccountsService', () => {
     function makeQueryBuilder(accounts: Account[], total: number) {
       const qb = {
         where: jest.fn().mockReturnThis(),
+        andWhere: jest.fn().mockReturnThis(),
         skip: jest.fn().mockReturnThis(),
         take: jest.fn().mockReturnThis(),
         getManyAndCount: jest.fn().mockResolvedValue([accounts, total]),
@@ -247,13 +248,16 @@ describe('AccountsService', () => {
       mockRepo.createQueryBuilder.mockReturnValue(
         makeQueryBuilder(accounts, 1),
       );
-
       const result = await service.findAll({ limit: 50, offset: 0 });
-
       expect(result.total).toBe(1);
       expect(result.accounts).toHaveLength(1);
     });
-
+    it('excludes soft-deleted accounts by default', async () => {
+      const qb = makeQueryBuilder([], 0);
+      mockRepo.createQueryBuilder.mockReturnValue(qb);
+      await service.findAll({ limit: 50, offset: 0 });
+      expect(qb.where).toHaveBeenCalledWith('account.deletedAt IS NULL');
+    });
     it('applies status filter when provided', async () => {
       const qb = makeQueryBuilder([], 0);
       mockRepo.createQueryBuilder.mockReturnValue(qb);
@@ -264,7 +268,7 @@ describe('AccountsService', () => {
         offset: 0,
       });
 
-      expect(qb.where).toHaveBeenCalledWith(
+      expect(qb.andWhere).toHaveBeenCalledWith(
         'account.status = :status',
         expect.objectContaining({ status: AccountStatus.PENDING_PAYMENT }),
       );
