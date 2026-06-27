@@ -50,6 +50,7 @@ describe('WebhooksService', () => {
     create: jest.fn(),
     save: jest.fn(),
     find: jest.fn().mockResolvedValue([]),
+    findOne: jest.fn(),
     update: jest.fn().mockResolvedValue({ affected: 1 }),
     createQueryBuilder: jest.fn().mockReturnValue(mockQb),
   };
@@ -125,6 +126,91 @@ describe('WebhooksService', () => {
       });
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({ id: webhook.id, url: webhook.url });
+    });
+  });
+
+  describe('update()', () => {
+    it('updates an existing webhook', async () => {
+      const webhook = makeWebhook();
+
+      mockWebhookRepository.findOne.mockResolvedValue(webhook);
+
+      mockWebhookRepository.save.mockResolvedValue({
+        ...webhook,
+        url: 'https://updated.example.com/hook',
+        events: ['account.created'],
+        description: 'Updated webhook',
+      });
+
+      const result = await service.update(webhook.id, {
+        url: 'https://updated.example.com/hook',
+        events: ['account.created'],
+        description: 'Updated webhook',
+      });
+
+      expect(mockWebhookRepository.findOne).toHaveBeenCalledWith({
+        where: { id: webhook.id },
+      });
+
+      expect(mockWebhookRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url: 'https://updated.example.com/hook',
+          events: ['account.created'],
+          description: 'Updated webhook',
+        }),
+      );
+
+      expect(result).toMatchObject({
+        id: webhook.id,
+        url: 'https://updated.example.com/hook',
+        events: ['account.created'],
+        description: 'Updated webhook',
+      });
+    });
+
+    it('throws NotFoundException when the webhook does not exist', async () => {
+      mockWebhookRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.update('missing-id', {
+          url: 'https://example.com',
+        }),
+      ).rejects.toThrow('Webhook with ID missing-id not found');
+    });
+  });
+
+  describe('remove()', () => {
+    it('deactivates an existing webhook', async () => {
+      const webhook = makeWebhook();
+
+      mockWebhookRepository.findOne.mockResolvedValue(webhook);
+      mockWebhookRepository.save.mockResolvedValue({
+        ...webhook,
+        isActive: false,
+      });
+
+      await service.remove(webhook.id);
+
+      expect(mockWebhookRepository.findOne).toHaveBeenCalledWith({
+        where: { id: webhook.id },
+      });
+
+      expect(mockWebhookRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: webhook.id,
+          isActive: false,
+        }),
+      );
+
+      expect(webhook.isActive).toBe(false);
+    });
+
+    it('throws NotFoundException when the webhook does not exist', async () => {
+      mockWebhookRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.remove('missing-id')).rejects.toThrow(
+        'Webhook with ID missing-id not found',
+      );
     });
   });
 
