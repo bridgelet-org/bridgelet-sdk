@@ -1,6 +1,12 @@
 import { jest } from '@jest/globals';
-import { RequestIdMiddleware, REQUEST_ID_HEADER } from './request-id.middleware.js';
-import { requestContextStorage, getRequestId } from '../context/request-context.js';
+import {
+  RequestIdMiddleware,
+  REQUEST_ID_HEADER,
+} from './request-id.middleware.js';
+import {
+  requestContextStorage,
+  getRequestId,
+} from '../context/request-context.js';
 import type { Request, Response, NextFunction } from 'express';
 
 function makeReq(headers: Record<string, string> = {}): Request {
@@ -29,7 +35,10 @@ describe('RequestIdMiddleware', () => {
     const res = makeRes();
 
     middleware.use(req, res as unknown as Response, () => {
-      expect(res.setHeader).toHaveBeenCalledWith(REQUEST_ID_HEADER, 'my-id-123');
+      expect(res.setHeader).toHaveBeenCalledWith(
+        REQUEST_ID_HEADER,
+        'my-id-123',
+      );
       done();
     });
   });

@@ -101,7 +101,9 @@ describe('AccountsService', () => {
         },
         {
           provide: KmsKeyProvider,
-          useValue: { getEncryptionKey: jest.fn().mockReturnValue('a'.repeat(64)) },
+          useValue: {
+            getEncryptionKey: jest.fn().mockReturnValue('a'.repeat(64)),
+          },
         },
       ],
     }).compile();

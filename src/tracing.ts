@@ -24,8 +24,7 @@ if (enabled) {
   sdk = new NodeSDK({
     serviceName: process.env.OTEL_SERVICE_NAME ?? 'bridgelet-sdk',
     traceExporter: new OTLPTraceExporter({
-      url:
-        process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'http://localhost:4317',
+      url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT ?? 'http://localhost:4317',
     }),
     instrumentations: [
       getNodeAutoInstrumentations({
@@ -38,9 +37,7 @@ if (enabled) {
   sdk.start();
 
   process.on('SIGTERM', () => {
-    sdk
-      ?.shutdown()
-      .finally(() => process.exit(0));
+    sdk?.shutdown().finally(() => process.exit(0));
   });
 }
 
