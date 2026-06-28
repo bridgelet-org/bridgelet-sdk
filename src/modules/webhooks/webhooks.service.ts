@@ -1,9 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as crypto from 'crypto';
 import { Webhook } from './entities/webhook.entity.js';
 import { CreateWebhookDto } from './dto/create-webhook.dto.js';
+import { UpdateWebhookDto } from './dto/update-webhook.dto.js';
 import { WebhookResponseDto } from './dto/webhook-response.dto.js';
 
 @Injectable()
@@ -32,6 +33,46 @@ export class WebhooksService {
       where: { isActive: true },
     });
     return webhooks.map((w) => this.toResponseDto(w));
+  }
+
+  async update(id: string, dto: UpdateWebhookDto): Promise<WebhookResponseDto> {
+    const webhook = await this.webhookRepository.findOne({
+      where: { id },
+    });
+
+    if (!webhook) {
+      throw new NotFoundException(`Webhook with ID ${id} not found`);
+    }
+
+    if (dto.url !== undefined) {
+      webhook.url = dto.url;
+    }
+
+    if (dto.events !== undefined) {
+      webhook.events = dto.events;
+    }
+
+    if (dto.description !== undefined) {
+      webhook.description = dto.description;
+    }
+
+    const updatedWebhook = await this.webhookRepository.save(webhook);
+
+    return this.toResponseDto(updatedWebhook);
+  }
+
+  async remove(id: string): Promise<void> {
+    const webhook = await this.webhookRepository.findOne({
+      where: { id },
+    });
+
+    if (!webhook) {
+      throw new NotFoundException(`Webhook with ID ${id} not found`);
+    }
+
+    webhook.isActive = false;
+
+    await this.webhookRepository.save(webhook);
   }
 
   /**

@@ -9,6 +9,8 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 const mockWebhooksService = {
   create: jest.fn(),
   findAll: jest.fn(),
+  update: jest.fn(),
+  remove: jest.fn(),
 };
 
 function makeWebhookResponse(overrides = {}): WebhookResponseDto {
@@ -93,6 +95,40 @@ describe('WebhooksController', () => {
       const result = await controller.findAll();
 
       expect(result).toEqual([]);
+    });
+  });
+
+  describe('update', () => {
+    it('delegates to webhooksService.update and returns the updated webhook', async () => {
+      const dto = {
+        url: 'https://updated.example.com/hook',
+        events: ['account.created'],
+        description: 'Updated webhook',
+      };
+
+      const response = makeWebhookResponse({
+        url: dto.url,
+        events: dto.events,
+        description: dto.description,
+      });
+
+      mockWebhooksService.update.mockResolvedValue(response);
+
+      const result = await controller.update('wh-uuid-1', dto);
+
+      expect(mockWebhooksService.update).toHaveBeenCalledWith('wh-uuid-1', dto);
+
+      expect(result).toEqual(response);
+    });
+  });
+
+  describe('remove', () => {
+    it('delegates to webhooksService.remove', async () => {
+      mockWebhooksService.remove.mockResolvedValue(undefined);
+
+      await controller.remove('wh-uuid-1');
+
+      expect(mockWebhooksService.remove).toHaveBeenCalledWith('wh-uuid-1');
     });
   });
 });
