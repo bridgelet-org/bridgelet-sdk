@@ -10,6 +10,7 @@ import * as crypto from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { AccountStatus } from './enums/account-status.enum.js';
 import { SecretEncryptionUtil } from '../../common/crypto/secret-encryption.util.js';
+import { KmsKeyProvider } from '../../common/crypto/kms-key.provider.js';
 import { WebhooksService } from '../webhooks/webhooks.service.js';
 import { sanitizeMetadata } from '../../common/utils/metadata-sanitizer.util.js';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
@@ -95,7 +96,6 @@ import { AccountLatencyMetricsProvider } from './providers/account-latency-metri
 @Injectable()
 export class AccountsService {
   private readonly logger = new Logger(AccountsService.name);
-  private readonly encryptionKey: string;
 
   constructor(
     @InjectRepository(Account)
@@ -107,11 +107,8 @@ export class AccountsService {
     @InjectMetric('account_creation_total')
     private readonly accountCreationCounter: Counter<string>,
     private latencyMetrics: AccountLatencyMetricsProvider,
-  ) {
-    this.encryptionKey = this.configService.getOrThrow<string>(
-      'stellar.encryptionKey',
-    );
-  }
+    private kmsKeyProvider: KmsKeyProvider,
+  ) {}
 
   public async create(
     createAccountDto: CreateAccountDto,
@@ -145,7 +142,7 @@ export class AccountsService {
       publicKey: ephemeralKeypair.publicKey(),
       secretKeyEncrypted: SecretEncryptionUtil.encrypt(
         ephemeralKeypair.secret(),
-        this.encryptionKey,
+        this.kmsKeyProvider.getEncryptionKey(),
       ),
       fundingSource: createAccountDto.fundingSource,
       amount: createAccountDto.amount,

@@ -7,6 +7,7 @@ import EmbeddedPostgres from 'embedded-postgres';
 import { DataSource } from 'typeorm';
 import { Account } from '../src/modules/accounts/entities/account.entity.js';
 import { Claim } from '../src/modules/claims/entities/claim.entity.js';
+import { ClaimAuditLog } from '../src/modules/claims/entities/claim-audit-log.entity.js';
 import { ContractEvent } from '../src/modules/stellar/entities/contract-event.entity.js';
 import { WebhookDelivery } from '../src/modules/webhooks/entities/webhook-delivery.entity.js';
 import { Webhook } from '../src/modules/webhooks/entities/webhook.entity.js';
@@ -18,6 +19,7 @@ import { AddClaimingToAccountStatus1718100004000 } from '../src/database/migrati
 import { CreateWebhookDeliveriesTable1718100005000 } from '../src/database/migrations/1718100005000-CreateWebhookDeliveriesTable.js';
 import { AddHighTrafficIndexes1718100006000 } from '../src/database/migrations/1718100006000-AddHighTrafficIndexes.js';
 import { CreateContractEventsTable1718100007000 } from '../src/database/migrations/1718100007000-CreateContractEventsTable.js';
+import { CreateClaimAuditLogTable1718100008000 } from '../src/database/migrations/1718100008000-CreateClaimAuditLogTable.js';
 
 const postgresUser = 'postgres';
 const postgresPassword = 'postgres';
@@ -32,6 +34,7 @@ const migrations = [
   CreateWebhookDeliveriesTable1718100005000,
   AddHighTrafficIndexes1718100006000,
   CreateContractEventsTable1718100007000,
+  CreateClaimAuditLogTable1718100008000,
 ];
 
 type SqlInMemoryLog = {
@@ -101,7 +104,7 @@ async function main(): Promise<void> {
       username: postgresUser,
       password: postgresPassword,
       database: postgresDatabase,
-      entities: [Account, Claim, Webhook, WebhookDelivery, ContractEvent],
+      entities: [Account, Claim, ClaimAuditLog, Webhook, WebhookDelivery, ContractEvent],
       migrations,
       migrationsTransactionMode: 'each',
       synchronize: false,
@@ -237,6 +240,20 @@ async function main(): Promise<void> {
     `);
     const highTrafficIndexes = indexRows.map(({ indexname }) => indexname);
 
+    const auditLogIndexRows: IndexRow[] = await dataSource.query(`
+      SELECT indexname
+      FROM pg_indexes
+      WHERE tablename = 'claim_audit_log'
+        AND indexname IN (
+          'IDX_claim_audit_log_accountId',
+          'IDX_claim_audit_log_attemptedAt'
+        )
+      ORDER BY indexname
+    `);
+    const claimAuditLogIndexes = auditLogIndexRows.map(
+      ({ indexname }) => indexname,
+    );
+
     process.stdout.write(
       JSON.stringify({
         enumValues: enumRows.map(({ enumlabel }) => enumlabel),
@@ -250,6 +267,7 @@ async function main(): Promise<void> {
         deliveryIndexes,
         schemaInSync: schemaLog.upQueries.length === 0,
         highTrafficIndexes,
+        claimAuditLogIndexes,
       }),
     );
   } finally {

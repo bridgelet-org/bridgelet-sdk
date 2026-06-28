@@ -14,6 +14,7 @@ import { SweepsService } from '../../sweeps/sweeps.service.js';
 import { TokenVerificationProvider } from './token-verification.provider.js';
 import { AccountStatus } from '../../accounts/enums/account-status.enum.js';
 import { SecretEncryptionUtil } from '../../../common/crypto/secret-encryption.util.js';
+import { KmsKeyProvider } from '../../../common/crypto/kms-key.provider.js';
 import { ConfigService } from '@nestjs/config';
 import { TransactionHashValidator } from '../../../common/validators/transaction-hash.validator.js';
 import { StellarAddressValidator } from '../../../common/validators/stellar-address.validator.js';
@@ -36,6 +37,7 @@ export class ClaimRedemptionProvider {
     private configService: ConfigService,
     private webhooksService: WebhooksService,
     private claimAuditProvider: ClaimAuditProvider,
+    private kmsKeyProvider: KmsKeyProvider,
   ) {}
 
   async redeemClaim(
@@ -133,7 +135,7 @@ export class ClaimRedemptionProvider {
         ephemeralPublicKey: account.publicKey,
         ephemeralSecret: SecretEncryptionUtil.decrypt(
           account.secretKeyEncrypted,
-          this.configService.getOrThrow<string>('stellar.encryptionKey'),
+          this.kmsKeyProvider.getEncryptionKey(),
         ),
         destinationAddress,
         amount: account.amount,

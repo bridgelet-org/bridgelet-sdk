@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -18,6 +18,8 @@ import { SchedulerModule } from './modules/scheduler/scheduler.module.js';
 import { PaymentMonitorModule } from './modules/payment-monitor/payment-monitor.module.js';
 import { ClaimsModule } from './modules/claims/claims.module.js';
 import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
+import { RequestIdMiddleware } from './common/middleware/request-id.middleware.js';
+import { CryptoModule } from './common/crypto/crypto.module.js';
 
 @Module({
   imports: [
@@ -50,8 +52,13 @@ import { WebhooksModule } from './modules/webhooks/webhooks.module.js';
     StellarModule,
     HealthModule,
     SchedulerModule,
+    CryptoModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestIdMiddleware).forRoutes('*');
+  }
+}

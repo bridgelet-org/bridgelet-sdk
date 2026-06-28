@@ -16,6 +16,7 @@ type MigrationCheckResult = {
   deliveryIndexes: string[][];
   schemaInSync: boolean;
   highTrafficIndexes: string[];
+  claimAuditLogIndexes: string[];
 };
 
 describe('Database migrations integration', () => {
@@ -36,7 +37,7 @@ describe('Database migrations integration', () => {
   });
 
   it('applies every migration, matches entity metadata, and enforces foreign keys', () => {
-    expect(result.executedMigrationNames).toHaveLength(8);
+    expect(result.executedMigrationNames).toHaveLength(9);
     expect(result.schemaInSync).toBe(true);
     expect(result.enumValues).toEqual(Object.values(AccountStatus));
     expect(result.foreignKeyColumns).toContainEqual(['accountId']);
@@ -69,5 +70,14 @@ describe('Database migrations integration', () => {
       'IDX_accounts_status_createdAt',
     );
     expect(result.highTrafficIndexes).toContain('IDX_accounts_createdAt');
+  });
+
+  it('creates claim_audit_log table with required indexes', () => {
+    expect(result.claimAuditLogIndexes).toContain(
+      'IDX_claim_audit_log_accountId',
+    );
+    expect(result.claimAuditLogIndexes).toContain(
+      'IDX_claim_audit_log_attemptedAt',
+    );
   });
 });

@@ -1,6 +1,7 @@
 import { jest } from '@jest/globals';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PinoLoggerService } from './pino-logger.service.js';
+import { requestContextStorage } from '../context/request-context.js';
 
 describe('PinoLoggerService', () => {
   let service: PinoLoggerService;
@@ -137,6 +138,26 @@ describe('PinoLoggerService', () => {
     it('does not redact ordinary messages', () => {
       service.log('sweep completed successfully');
       expect(lastStdout().msg).toBe('sweep completed successfully');
+    });
+  });
+
+  // ── Request context traceId ────────────────────────────────────────────────
+
+  describe('traceId from request context', () => {
+    it('uses requestId from AsyncLocalStorage when available', (done) => {
+      requestContextStorage.run({ requestId: 'test-req-id-999' }, () => {
+        service.log('traced message');
+        expect(lastStdout().traceId).toBe('test-req-id-999');
+        done();
+      });
+    });
+
+    it('falls back to random UUID when no context is set', () => {
+      service.log('no context');
+      const traceId = lastStdout().traceId as string;
+      expect(traceId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
     });
   });
 });

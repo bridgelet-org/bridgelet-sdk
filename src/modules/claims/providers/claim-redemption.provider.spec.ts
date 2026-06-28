@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { SecretEncryptionUtil } from '../../../common/crypto/secret-encryption.util.js';
 import { WebhooksService } from '../../webhooks/webhooks.service.js';
 import { ClaimAuditProvider } from './claim-audit.provider.js';
+import { KmsKeyProvider } from '../../../common/crypto/kms-key.provider.js';
 
 describe('ClaimRedemptionProvider', () => {
   let provider: ClaimRedemptionProvider;
@@ -146,6 +147,10 @@ describe('ClaimRedemptionProvider', () => {
         {
           provide: ClaimAuditProvider,
           useValue: { record: jest.fn().mockResolvedValue(undefined) },
+        },
+        {
+          provide: KmsKeyProvider,
+          useValue: { getEncryptionKey: jest.fn().mockReturnValue('a'.repeat(64)) },
         },
       ],
     }).compile();

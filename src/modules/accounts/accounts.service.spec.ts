@@ -11,6 +11,7 @@ import { WebhooksService } from '../webhooks/webhooks.service.js';
 import { AccountStatus } from './enums/account-status.enum.js';
 import { CreateAccountDto } from './dto/create-account.dto.js';
 import { AccountLatencyMetricsProvider } from './providers/account-latency-metrics.provider.js';
+import { KmsKeyProvider } from '../../common/crypto/kms-key.provider.js';
 
 const VALID_KEY = 'G' + 'A'.repeat(55);
 const VALID_KEY2 = 'G' + 'B'.repeat(55);
@@ -97,6 +98,10 @@ describe('AccountsService', () => {
         {
           provide: getToken('account_creation_total'),
           useValue: { inc: jest.fn() },
+        },
+        {
+          provide: KmsKeyProvider,
+          useValue: { getEncryptionKey: jest.fn().mockReturnValue('a'.repeat(64)) },
         },
       ],
     }).compile();

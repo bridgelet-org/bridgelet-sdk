@@ -1,5 +1,6 @@
 import { Injectable, LoggerService } from '@nestjs/common';
 import * as crypto from 'crypto';
+import { getRequestId } from '../context/request-context.js';
 
 type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
@@ -84,8 +85,6 @@ export class PinoLoggerService implements LoggerService {
   }
 
   private currentTraceId(): string {
-    // Generates a per-invocation trace ID. Replace with AsyncLocalStorage
-    // propagation when a tracing middleware is introduced.
-    return crypto.randomUUID();
+    return getRequestId() ?? crypto.randomUUID();
   }
 }
