@@ -37,7 +37,13 @@ if (enabled) {
   sdk.start();
 
   process.on('SIGTERM', () => {
-    sdk?.shutdown().finally(() => process.exit(0));
+    void (async () => {
+      try {
+        await sdk?.shutdown();
+      } finally {
+        process.exit(0);
+      }
+    })();
   });
 }
 

@@ -7,7 +7,7 @@ import {
   requestContextStorage,
   getRequestId,
 } from '../context/request-context.js';
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, Response } from 'express';
 
 function makeReq(headers: Record<string, string> = {}): Request {
   return { headers } as unknown as Request;

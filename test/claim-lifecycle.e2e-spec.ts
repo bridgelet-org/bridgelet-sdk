@@ -36,6 +36,7 @@ import * as crypto from 'crypto';
 import * as net from 'net';
 import * as os from 'os';
 import * as path from 'path';
+import type { Server as HttpServer } from 'http';
 import { mkdtemp, rm } from 'fs/promises';
 import EmbeddedPostgres from 'embedded-postgres';
 
@@ -79,6 +80,13 @@ describe('Claim lifecycle (e2e) [issue #171]', () => {
   let pgDataDir: string | null = null;
   let app: INestApplication | null = null;
   let ds: DataSource | null = null;
+
+  const getHttpServer = (): HttpServer => {
+    if (!app) {
+      throw new Error('Application not initialized');
+    }
+    return app.getHttpServer() as HttpServer;
+  };
 
   beforeAll(async () => {
     const port = await getFreePort();
@@ -192,7 +200,7 @@ describe('Claim lifecycle (e2e) [issue #171]', () => {
 
   describe('Happy path', () => {
     it('POST /claims/verify returns a verification success', async () => {
-      const res = await request(app!.getHttpServer())
+      const res = await request(getHttpServer())
         .post('/claims/verify')
         .send({ claimToken: SEED_TOKEN });
       expect(res.status).toBeLessThan(400);
@@ -200,12 +208,10 @@ describe('Claim lifecycle (e2e) [issue #171]', () => {
     });
 
     it('POST /claims/redeem returns success with mocked sweep txHash and transitions to CLAIMED', async () => {
-      const res = await request(app!.getHttpServer())
-        .post('/claims/redeem')
-        .send({
-          claimToken: SEED_TOKEN,
-          destinationAddress: VALID_DESTINATION,
-        });
+      const res = await request(getHttpServer()).post('/claims/redeem').send({
+        claimToken: SEED_TOKEN,
+        destinationAddress: VALID_DESTINATION,
+      });
       expect(res.status).toBe(201);
       expect(res.body).toEqual(
         expect.objectContaining({
@@ -227,7 +233,7 @@ describe('Claim lifecycle (e2e) [issue #171]', () => {
     });
 
     it('GET /claims/:id returns the recorded claim without 5xx', async () => {
-      await request(app!.getHttpServer())
+      await request(getHttpServer())
         .post('/claims/redeem')
         .send({
           claimToken: SEED_TOKEN,
@@ -236,24 +242,20 @@ describe('Claim lifecycle (e2e) [issue #171]', () => {
         .expect(201);
 
       const fetched = await ds!.getRepository(Claim).findOneByOrFail({});
-      const res = await request(app!.getHttpServer()).get(
-        `/claims/${fetched.id}`,
-      );
+      const res = await request(getHttpServer()).get(`/claims/${fetched.id}`);
       expect(res.status).toBe(201);
     });
   });
 
   describe('Idempotency (double redeem)', () => {
     it('a second redeem with the same token does not 5xx', async () => {
-      const first = await request(app!.getHttpServer())
-        .post('/claims/redeem')
-        .send({
-          claimToken: SEED_TOKEN,
-          destinationAddress: VALID_DESTINATION,
-        });
+      const first = await request(getHttpServer()).post('/claims/redeem').send({
+        claimToken: SEED_TOKEN,
+        destinationAddress: VALID_DESTINATION,
+      });
       expect(first.status).toBe(201);
 
-      const second = await request(app!.getHttpServer())
+      const second = await request(getHttpServer())
         .post('/claims/redeem')
         .send({
           claimToken: SEED_TOKEN,
@@ -265,17 +267,15 @@ describe('Claim lifecycle (e2e) [issue #171]', () => {
 
   describe('DTO validation', () => {
     it('rejects a non-Stellar destination address with 400', async () => {
-      const res = await request(app!.getHttpServer())
-        .post('/claims/redeem')
-        .send({
-          claimToken: SEED_TOKEN,
-          destinationAddress: 'not-a-stellar-address',
-        });
+      const res = await request(getHttpServer()).post('/claims/redeem').send({
+        claimToken: SEED_TOKEN,
+        destinationAddress: 'not-a-stellar-address',
+      });
       expect(res.status).toBe(400);
     });
 
     it('rejects a missing claimToken with 400', async () => {
-      const res = await request(app!.getHttpServer())
+      const res = await request(getHttpServer())
         .post('/claims/redeem')
         .send({ destinationAddress: VALID_DESTINATION });
       expect(res.status).toBe(400);
