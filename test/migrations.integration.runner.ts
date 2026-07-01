@@ -18,6 +18,7 @@ import { AddClaimingToAccountStatus1718100004000 } from '../src/database/migrati
 import { CreateWebhookDeliveriesTable1718100005000 } from '../src/database/migrations/1718100005000-CreateWebhookDeliveriesTable.js';
 import { AddHighTrafficIndexes1718100006000 } from '../src/database/migrations/1718100006000-AddHighTrafficIndexes.js';
 import { CreateContractEventsTable1718100007000 } from '../src/database/migrations/1718100007000-CreateContractEventsTable.js';
+import { AddPartialSweepToAccountStatus1718100008000 } from '../src/database/migrations/1718100008000-AddPartialSweepToAccountStatus.js';
 
 const postgresUser = 'postgres';
 const postgresPassword = 'postgres';
@@ -32,6 +33,7 @@ const migrations = [
   CreateWebhookDeliveriesTable1718100005000,
   AddHighTrafficIndexes1718100006000,
   CreateContractEventsTable1718100007000,
+  AddPartialSweepToAccountStatus1718100008000,
 ];
 
 type SqlInMemoryLog = {

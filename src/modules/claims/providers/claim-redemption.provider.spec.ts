@@ -155,6 +155,14 @@ describe('ClaimRedemptionProvider', () => {
   }
 
   beforeEach(async () => {
+    // Reset mutable values on the shared mockAccount so a previous test's
+    // `locked.status = AccountStatus.CLAIMING` mutation does not leak into
+    // subsequent tests (the shared reference is locked, then mutated by
+    // redeemClaim's transaction body).
+    mockAccount.status = AccountStatus.PENDING_CLAIM;
+    mockAccount.destinationAddress = '';
+    mockAccount.claimedAt = null;
+
     const ds = makeHappyPathDataSource();
     provider = await buildModule(ds);
 
@@ -216,6 +224,8 @@ describe('ClaimRedemptionProvider', () => {
         destinationAddress: VALID_DESTINATION,
         amount: mockAccount.amount,
         asset: mockAccount.asset,
+        // Fresh PENDING_CLAIM attempt -> contract auth must run.
+        skipContractAuth: false,
       });
     });
 
@@ -378,7 +388,16 @@ describe('ClaimRedemptionProvider', () => {
           ),
       };
       const p = await buildModule(ds);
-      mockSweepsService.executeSweep.mockResolvedValueOnce(mockSweepResult);
+      // Return a partial result so redeemClaim never enters the success
+      // path (which would need a 2nd transaction we have not mocked).
+      mockSweepsService.executeSweep.mockResolvedValueOnce({
+        success: false,
+        isPartial: true,
+        contractAuthHash: 'partial-auth-hash',
+        amountSwept: mockAccount.amount,
+        destination: VALID_DESTINATION,
+        error: 'Horizon offline',
+      });
 
       await p.redeemClaim(VALID_TOKEN, VALID_DESTINATION);
 
