@@ -365,6 +365,38 @@ describe('ClaimRedemptionProvider', () => {
     });
   });
 
+  describe('redeemClaim - propagates TokenVerification errors (issue #167)', () => {
+    it('rethrows BadRequestException when token is expired', async () => {
+      mockTokenVerificationProvider.verifyClaimToken.mockRejectedValue(
+        new BadRequestException('Token has expired'),
+      );
+
+      await expect(
+        provider.redeemClaim(VALID_TOKEN, VALID_DESTINATION),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rethrows BadRequestException when token does not match the requested account', async () => {
+      mockTokenVerificationProvider.verifyClaimToken.mockRejectedValue(
+        new BadRequestException('Token does not match the requested account'),
+      );
+
+      await expect(
+        provider.redeemClaim(VALID_TOKEN, VALID_DESTINATION),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('rethrows BadRequestException for malformed JWT', async () => {
+      mockTokenVerificationProvider.verifyClaimToken.mockRejectedValue(
+        new BadRequestException('jwt malformed'),
+      );
+
+      await expect(
+        provider.redeemClaim(VALID_TOKEN, VALID_DESTINATION),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
   // ========================================================================
   // Partial-sweep path (issue #169): when SweepsService.executeSweep returns
   // isPartial=true the orchestrator transitions the account to PARTIAL_SWEEP,
