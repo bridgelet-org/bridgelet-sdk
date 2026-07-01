@@ -83,8 +83,8 @@ describe('createAuditLogger', () => {
     const content = fs.readFileSync(file, 'utf8');
     const lines = content.trim().split('\n');
     expect(lines).toHaveLength(2);
-    const first = JSON.parse(lines[0] as string) as Record<string, unknown>;
-    const second = JSON.parse(lines[1] as string) as Record<string, unknown>;
+    const first = JSON.parse(lines[0]) as Record<string, unknown>;
+    const second = JSON.parse(lines[1]) as Record<string, unknown>;
     expect(first.event).toBe('start');
     expect(first.execute).toBe(false);
     expect(typeof first.time).toBe('string');

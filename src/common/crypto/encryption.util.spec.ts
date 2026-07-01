@@ -139,13 +139,12 @@ describe('SecretEncryptionUtil', () => {
     });
 
     it('returns corrupt for empty / non-string inputs', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       expect(SecretEncryptionUtil.classify('' as any)).toBe('corrupt');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect(SecretEncryptionUtil.classify(undefined as any)).toBe('corrupt');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect(SecretEncryptionUtil.classify(null as any)).toBe('corrupt');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       expect(SecretEncryptionUtil.classify(123 as any)).toBe('corrupt');
     });
 

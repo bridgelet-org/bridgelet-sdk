@@ -113,8 +113,13 @@ export function createAuditLogger(filePath: string): AuditLogger {
     closeSync() {
       closeFd();
     },
-    async closeAsync() {
+    closeAsync(): Promise<void> {
       closeFd();
+      // Underlying I/O is already synchronous; return a resolved promise so
+      // callers can `await` this inside a `finally {}` block for unified
+      // shutdown sequencing regardless of whether the file was actually
+      // written to. Resolves on the next microtask tick.
+      return Promise.resolve();
     },
   };
 }

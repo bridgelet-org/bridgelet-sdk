@@ -54,16 +54,12 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule, TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { NestFactory } from '@nestjs/core';
 import { DataSource, UpdateResult } from 'typeorm';
-import * as path from 'path';
 
 import { parseCli, createAuditLogger, type CliFlags } from './migration-cli.js';
 import databaseConfig from '../config/database.config.js';
 import stellarConfig from '../config/stellar.config.js';
 import { Account } from '../modules/accounts/entities/account.entity.js';
-import {
-  SecretEncryptionUtil,
-  SecretFormat,
-} from '../common/crypto/secret-encryption.util.js';
+import { SecretEncryptionUtil } from '../common/crypto/secret-encryption.util.js';
 
 // ---------------------------------------------------------------------------
 // Migration module — minimal application context. Deliberately does NOT import
