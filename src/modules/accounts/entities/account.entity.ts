@@ -4,6 +4,7 @@ import {
   PrimaryGeneratedColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  DeleteDateColumn,
   Index,
 } from 'typeorm';
 import { AccountStatus } from '../enums/account-status.enum.js';
@@ -22,6 +23,7 @@ import { AccountStatus } from '../enums/account-status.enum.js';
 @Index('IDX_accounts_status_expiresAt', ['status', 'expiresAt'])
 @Index('IDX_accounts_status_createdAt', ['status', 'createdAt'])
 @Index('IDX_accounts_createdAt', ['createdAt'])
+@Index('IDX_accounts_deletedAt', ['deletedAt'])
 @Entity('accounts')
 export class Account {
   @PrimaryGeneratedColumn('uuid')
@@ -79,6 +81,9 @@ export class Account {
   @Column({ type: 'timestamp', nullable: true })
   expiredAt: Date | null; // Actual time expiry was processed - set by the expiry handler, null until then
 
-  @Column({ type: 'jsonb', nullable: true })
+@Column({ type: 'jsonb', nullable: true })
   metadata: Record<string, any>;
+
+  @DeleteDateColumn({ type: 'timestamp', nullable: true })
+  deletedAt: Date | null;
 }

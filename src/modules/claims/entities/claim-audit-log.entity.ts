@@ -6,7 +6,7 @@ import {
   Index,
 } from 'typeorm';
 
-export type ClaimOutcome = 'success' | 'failure';
+export type ClaimOutcome = 'success' | 'failure' | 'partial';
 
 @Entity('claim_audit_log')
 @Index(['accountId'])

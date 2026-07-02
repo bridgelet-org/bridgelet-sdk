@@ -20,6 +20,7 @@ import { CreateWebhookDeliveriesTable1718100005000 } from '../src/database/migra
 import { AddHighTrafficIndexes1718100006000 } from '../src/database/migrations/1718100006000-AddHighTrafficIndexes.js';
 import { CreateContractEventsTable1718100007000 } from '../src/database/migrations/1718100007000-CreateContractEventsTable.js';
 import { CreateClaimAuditLogTable1718100008000 } from '../src/database/migrations/1718100008000-CreateClaimAuditLogTable.js';
+import { AddPartialSweepToAccountStatus1718100008000 } from '../src/database/migrations/1718100008000-AddPartialSweepToAccountStatus.js';
 
 const postgresUser = 'postgres';
 const postgresPassword = 'postgres';
@@ -35,6 +36,7 @@ const migrations = [
   AddHighTrafficIndexes1718100006000,
   CreateContractEventsTable1718100007000,
   CreateClaimAuditLogTable1718100008000,
+  AddPartialSweepToAccountStatus1718100008000,
 ];
 
 type SqlInMemoryLog = {
@@ -126,6 +128,7 @@ async function main(): Promise<void> {
         log: () => Promise<SqlInMemoryLog>;
       }
     ).log();
+    console.error('DEBUG upQueries:', JSON.stringify(schemaLog.upQueries.map((q) => q.query), null, 2));
 
     const enumRows: Array<{ enumlabel: string }> = await dataSource.query(`
       SELECT e.enumlabel

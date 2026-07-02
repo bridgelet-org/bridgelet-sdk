@@ -38,10 +38,15 @@ import { AccountLatencyMetricsProvider } from './providers/account-latency-metri
  *
  * Security Notes
  * --------------
- * - MVP placeholders: Several methods in this file include intentionally
- *   lightweight or placeholder implementations that are NOT production secure.
- *   These are clearly marked in the code. Examples include:
- *     - `encryptSecret()` currently uses base64 for storage (NOT SECURE).
+ * - Encryption status: `secretKeyEncrypted` is stored as an AES-256-GCM
+ *   ciphertext via `SecretEncryptionUtil` (random IV per write, versioned
+ *   `aes256gcm:v1:` prefix). Pre-PR #193 rows may still exist in migration
+ *   window with either an unprefixed AES-GCM payload (decryption still
+ *   succeeds) or the residual MVP `Buffer.from(secret).toString('base64')`
+ *   placeholder (decryption throws; operator must run
+ *   `npm run migrate:secrets -- --i-have-a-backup --execute` once before any
+ *   claim can succeed against those rows). Key rotation is a separate concern
+ *   and is NOT covered by this util — it requires a dual-key decrypt path.
  *     - Token signing uses the configured JWT secret; ensure the secret
  *       management and rotation policies meet your security requirements.
  *
@@ -231,10 +236,12 @@ export class AccountsService {
     limit: number;
     offset: number;
   }): Promise<{ accounts: AccountResponseDto[]; total: number }> {
-    const query = this.accountsRepository.createQueryBuilder('account');
+   const query = this.accountsRepository
+      .createQueryBuilder('account')
+      .where('account.deletedAt IS NULL');
 
     if (status) {
-      query.where('account.status = :status', { status });
+      query.andWhere('account.status = :status', { status });
     }
 
     query.skip(offset).take(Math.min(limit, 100));
