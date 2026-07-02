@@ -84,6 +84,7 @@ export class ClaimRedemptionProvider {
           .createQueryBuilder(Account, 'account')
           .setLock('pessimistic_write')
           .where('account.claimTokenHash = :tokenHash', { tokenHash })
+          .andWhere('account.deletedAt IS NULL')
           .getOne();
 
         if (!locked) {
