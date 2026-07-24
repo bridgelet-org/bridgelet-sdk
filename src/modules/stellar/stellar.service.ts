@@ -4,7 +4,7 @@ import * as StellarSdk from '@stellar/stellar-sdk';
 import { rpc as SorobanRpc } from '@stellar/stellar-sdk';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Histogram } from 'prom-client';
-import { throwContractError } from '../../common/errors/contract-error.mapper';
+import { throwContractError } from '../../common/errors/contract-error.mapper.js';
 
 export const EXPIRY_BUFFER_LEDGERS = 10;
 
@@ -47,8 +47,11 @@ export class StellarService implements OnModuleInit {
     }
     this.network = network as ValidNetwork;
 
-    const horizonUrl = this.configService.getOrThrow<string>('stellar.horizonUrl');
-    const sorobanRpcUrl = this.configService.getOrThrow<string>('stellar.sorobanRpcUrl');
+    const horizonUrl =
+      this.configService.getOrThrow<string>('stellar.horizonUrl');
+    const sorobanRpcUrl = this.configService.getOrThrow<string>(
+      'stellar.sorobanRpcUrl',
+    );
 
     // Warn if URLs look like they belong to the wrong network
     const isTestnetUrl =
