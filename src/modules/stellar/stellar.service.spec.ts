@@ -80,6 +80,9 @@ describe('StellarService', () => {
 
     service = module.get<StellarService>(StellarService);
 
+    // Trigger OnModuleInit to set internal state (network, URL validation)
+    service.onModuleInit();
+
     // Replace internal SDK server references with our controlled mocks
     (service as unknown as { server: unknown; sorobanServer: unknown }).server =
       horizonServer;
@@ -340,7 +343,7 @@ describe('StellarService', () => {
       });
 
       await expect(service.executeSweep(params)).rejects.toThrow(
-        'ALREADY_SWEPT',
+        'This account has already been swept.',
       );
     });
 
@@ -356,7 +359,7 @@ describe('StellarService', () => {
       });
 
       await expect(service.executeSweep(params)).rejects.toThrow(
-        'ACCOUNT_EXPIRED',
+        'This account has expired and can no longer be used.',
       );
     });
 
@@ -372,7 +375,7 @@ describe('StellarService', () => {
       });
 
       await expect(service.executeSweep(params)).rejects.toThrow(
-        'execute_sweep failed',
+        'An unexpected contract error occurred',
       );
     });
   });
@@ -439,7 +442,7 @@ describe('StellarService', () => {
       });
 
       await expect(service.expireAccount(params)).rejects.toThrow(
-        'ACCOUNT_ALREADY_TERMINAL',
+        'The account is in a terminal state and cannot be modified.',
       );
     });
 
@@ -458,7 +461,7 @@ describe('StellarService', () => {
       });
 
       await expect(service.expireAccount(params)).rejects.toThrow(
-        'expire() failed',
+        'An unexpected contract error occurred',
       );
     });
   });
@@ -610,6 +613,7 @@ describe('StellarService', () => {
       }).compile();
 
       const mainnetService = mainnetModule.get<StellarService>(StellarService);
+      mainnetService.onModuleInit();
       type InternalService = {
         network: string;
         getNetworkPassphrase: () => string;

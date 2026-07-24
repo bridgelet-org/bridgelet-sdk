@@ -1,45 +1,104 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as StellarSdk from '@stellar/stellar-sdk';
 import { rpc as SorobanRpc } from '@stellar/stellar-sdk';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Histogram } from 'prom-client';
+import { throwContractError } from '../../common/errors/contract-error.mapper.js';
 
 export const EXPIRY_BUFFER_LEDGERS = 10;
 
+/** Valid network identifiers accepted by the configuration. */
+const VALID_NETWORKS = ['testnet', 'mainnet'] as const;
+type ValidNetwork = (typeof VALID_NETWORKS)[number];
+
 @Injectable()
-export class StellarService {
+export class StellarService implements OnModuleInit {
   private readonly logger = new Logger(StellarService.name);
   private server: StellarSdk.Horizon.Server;
   private sorobanServer: SorobanRpc.Server;
-  private network: string;
+  private network: ValidNetwork;
+
+  // --- Ledger cache (#218) ---
+  private cachedLedger: number | null = null;
+  private cachedLedgerAt: number = 0;
+  /** Cache the ledger sequence for 10 seconds to avoid redundant Horizon calls. */
+  private static readonly LEDGER_CACHE_TTL_MS = 10_000;
 
   constructor(
     private configService: ConfigService,
     @InjectMetric('soroban_rpc_latency_seconds')
     private readonly sorobanRpcLatency: Histogram<string>,
-  ) {
+  ) {}
+
+  /**
+   * Validate stellar configuration on startup (#212).
+   * Ensures the network value is valid and the Horizon / Soroban RPC URLs
+   * are consistent with the chosen network.
+   */
+  onModuleInit(): void {
+    const networkRaw = this.configService.getOrThrow<string>('stellar.network');
+    const network = networkRaw.toLowerCase().trim();
+
+    if (!(VALID_NETWORKS as readonly string[]).includes(network)) {
+      throw new Error(
+        `Invalid STELLAR_NETWORK "${networkRaw}". Must be one of: ${VALID_NETWORKS.join(', ')}`,
+      );
+    }
+    this.network = network as ValidNetwork;
+
     const horizonUrl =
       this.configService.getOrThrow<string>('stellar.horizonUrl');
     const sorobanRpcUrl = this.configService.getOrThrow<string>(
       'stellar.sorobanRpcUrl',
     );
-    this.network = this.configService.getOrThrow<string>('stellar.network');
+
+    // Warn if URLs look like they belong to the wrong network
+    const isTestnetUrl =
+      horizonUrl.includes('testnet') || sorobanRpcUrl.includes('testnet');
+    const isMainnetUrl =
+      horizonUrl.includes('public') ||
+      horizonUrl.includes('mainnet') ||
+      sorobanRpcUrl.includes('public') ||
+      sorobanRpcUrl.includes('mainnet');
+
+    if (this.network === 'mainnet' && isTestnetUrl) {
+      this.logger.warn(
+        `⚠️  STELLAR_NETWORK is "mainnet" but Horizon/RPC URLs appear to point to testnet. ` +
+          `Horizon: ${horizonUrl}, Soroban: ${sorobanRpcUrl}`,
+      );
+    }
+    if (this.network === 'testnet' && isMainnetUrl) {
+      this.logger.warn(
+        `⚠️  STELLAR_NETWORK is "testnet" but Horizon/RPC URLs appear to point to mainnet. ` +
+          `Horizon: ${horizonUrl}, Soroban: ${sorobanRpcUrl}`,
+      );
+    }
+
     this.server = new StellarSdk.Horizon.Server(horizonUrl);
     this.sorobanServer = new SorobanRpc.Server(sorobanRpcUrl);
-
     this.logger.log(`Initialized Stellar service for ${this.network}`);
   }
 
   /**
    * Fetches the current ledger sequence number from Horizon.
-   * Used to convert wall-clock expiry times to ledger-based expiry
-   * required by EphemeralAccount.initialize() on-chain.
+   * Uses a short-lived in-memory cache to avoid redundant Horizon calls (#218).
    *
    * Stellar closes a ledger approximately every 5 seconds.
    * Conversion: expiry_ledger = current_ledger + Math.ceil(expiresInSeconds / 5)
    */
   async getCurrentLedger(): Promise<number> {
+    const now = Date.now();
+    if (
+      this.cachedLedger !== null &&
+      now - this.cachedLedgerAt < StellarService.LEDGER_CACHE_TTL_MS
+    ) {
+      this.logger.debug(
+        `Current ledger sequence (cached): ${this.cachedLedger}`,
+      );
+      return this.cachedLedger;
+    }
+
     const ledgerPage = await this.server
       .ledgers()
       .order('desc')
@@ -47,6 +106,8 @@ export class StellarService {
       .call();
 
     const sequence = ledgerPage.records[0].sequence;
+    this.cachedLedger = sequence;
+    this.cachedLedgerAt = now;
     this.logger.debug(`Current ledger sequence: ${sequence}`);
     return sequence;
   }
@@ -315,11 +376,7 @@ export class StellarService {
         `execute_sweep failed for ${params.ephemeralAccountContractId}: ${errStr}`,
       );
 
-      // Surface terminal errors explicitly so callers don't retry
-      if (errStr.includes('AlreadySwept')) throw new Error('ALREADY_SWEPT');
-      if (errStr.includes('AccountExpired')) throw new Error('ACCOUNT_EXPIRED');
-
-      throw new Error(`execute_sweep failed: ${errStr}`);
+      throwContractError(errStr);
     }
 
     await this.waitForTransaction(result.hash);
@@ -386,10 +443,7 @@ export class StellarService {
 
     if (result.status === 'ERROR') {
       const errStr = JSON.stringify(result.errorResult);
-      if (errStr.includes('InvalidStatus')) {
-        throw new Error('ACCOUNT_ALREADY_TERMINAL');
-      }
-      throw new Error(`expire() failed: ${errStr}`);
+      throwContractError(errStr);
     }
 
     await this.waitForTransaction(result.hash);
