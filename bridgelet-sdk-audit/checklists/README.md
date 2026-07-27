@@ -8,5 +8,6 @@ This directory contains standardized checklists used during internal code audits
 - [Error Mapping Completeness](./error-mapping-completeness-checklist.md)
 - [Account Expiry Flow](./account-expiry-flow-checklist.md)
 - [Sweep Execution Flow](./sweep-execution-flow-checklist.md)
+- [MVP Note Accuracy](./mvp-note-accuracy-checklist.md)
 
 Please ensure these checklists are completed during PR reviews for relevant components.
