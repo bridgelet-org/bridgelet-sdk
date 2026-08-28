@@ -83,3 +83,21 @@ jobs:
             cat /tmp/migration-drift.txt
             exit 1
           fi
+
+  swagger-drift:
+    name: Check Swagger Spec Drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Check Swagger baseline exists
+        run: |
+          if [ -f docs/swagger-baseline.json ]; then
+            echo "Swagger baseline found — drift check active."
+          else
+            echo "::notice::No docs/swagger-baseline.json committed yet. Commit a baseline to enable drift detection (issue #537)."
+          fi

@@ -260,3 +260,21 @@ If you notice issues outside your scope, open a separate issue instead.
 ---
 
 **Thank you for helping improve Bridgelet SDK!** 🚀
+
+## Pre-commit Hooks
+
+Pre-commit hooks are managed via [Husky](https://typicode.github.io/husky/) and [lint-staged](https://github.com/lint-staged/lint-staged).
+
+After cloning, run:
+
+```bash
+npm install
+```
+
+This triggers the `prepare` script which installs the Husky hooks. The pre-commit hook runs `lint-staged` on staged `.ts`, `.json`, `.md`, `.yml`, and `.yaml` files (lint + format). Only staged files are checked, so the hook is fast.
+
+To skip the hook in an emergency:
+
+```bash
+git commit --no-verify -m "your message"
+```
