@@ -17,9 +17,12 @@ describe('ContractProvider — generateAuthSignature production guard', () => {
     const configMock = {
       getOrThrow: (key: string) => {
         if (key === 'stellar.sweepSigningKeySeed') return 'tooshort';
-        if (key === 'stellar.contracts.sweepController') return 'C' + 'A'.repeat(55);
-        if (key === 'stellar.contracts.ephemeralAccount') return 'C' + 'B'.repeat(55);
-        if (key === 'stellar.sorobanRpcUrl') return 'https://soroban-testnet.stellar.org';
+        if (key === 'stellar.contracts.sweepController')
+          return 'C' + 'A'.repeat(55);
+        if (key === 'stellar.contracts.ephemeralAccount')
+          return 'C' + 'B'.repeat(55);
+        if (key === 'stellar.sorobanRpcUrl')
+          return 'https://soroban-testnet.stellar.org';
         if (key === 'stellar.network') return 'testnet';
         return '';
       },
@@ -41,7 +44,9 @@ describe('ContractProvider — generateAuthSignature production guard', () => {
 
   it('does not fire the production guard outside of production environments', () => {
     // In development/test the guard is bypassed; the function is allowed to proceed.
-    expect(['development', 'test']).toContain(process.env.NODE_ENV ?? 'development');
+    expect(['development', 'test']).toContain(
+      process.env.NODE_ENV ?? 'development',
+    );
   });
 
   it('documents: NODE_ENV spoofing from request context is not possible', () => {

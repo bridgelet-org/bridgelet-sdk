@@ -184,11 +184,11 @@ using a stub/placeholder signature.
 
 ### Bypass vectors assessed
 
-| Vector | Assessment |
-|--------|------------|
-| `NODE_ENV` spoofing from request context | **Not possible.** `process.env` is shared and set at startup; no per-request mutation path exists in the NestJS HTTP lifecycle. |
-| Setting `NODE_ENV=development` in production | **Deployment-level control.** Secrets manager injection and container configuration control env vars; a correct deployment policy prevents this. |
-| Passing a 32-byte placeholder seed | The guard only checks byte length (32 bytes), not entropy. A low-entropy seed would pass the guard but produce a weak signature — acceptable given the stub contract also accepts any signature in non-production. |
+| Vector                                       | Assessment                                                                                                                                                                                                         |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `NODE_ENV` spoofing from request context     | **Not possible.** `process.env` is shared and set at startup; no per-request mutation path exists in the NestJS HTTP lifecycle.                                                                                    |
+| Setting `NODE_ENV=development` in production | **Deployment-level control.** Secrets manager injection and container configuration control env vars; a correct deployment policy prevents this.                                                                   |
+| Passing a 32-byte placeholder seed           | The guard only checks byte length (32 bytes), not entropy. A low-entropy seed would pass the guard but produce a weak signature — acceptable given the stub contract also accepts any signature in non-production. |
 
 ### Conclusion
 
