@@ -11,6 +11,7 @@ import { AccountsModule } from './modules/accounts/accounts.module.js';
 import databaseConfig from './config/database.config.js';
 import stellarConfig from './config/stellar.config.js';
 import appConfig from './config/app.config.js';
+import { validateEnv } from './config/env-validation.js';
 import { StellarModule } from './modules/stellar/stellar.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { AppController } from './app.controller.js';
@@ -31,6 +32,9 @@ import { RolesGuard } from './common/guards/roles.guard.js';
     ConfigModule.forRoot({
       isGlobal: true,
       load: [databaseConfig, stellarConfig, appConfig],
+      // Refuse to boot with every missing or malformed variable listed at once,
+      // rather than failing on the first request that needs one (issue #540).
+      validate: validateEnv,
     }),
     PrometheusModule.register({
       path: '/metrics',
