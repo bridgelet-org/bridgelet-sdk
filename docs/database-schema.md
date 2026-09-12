@@ -17,9 +17,108 @@ The current schema is created entirely through the migrations in `src/database/m
 
 ## Account Status Enum
 
-`account_status_enum` currently contains these values, in order:
+`account_status_enum` contains eight values. The order below is the order the
+PostgreSQL type actually has — what an `ORDER BY status` would use — not a
+lifecycle order, and it was assembled by four migrations rather than declared
+once:
 
-`initializing`, `pending_payment`, `pending_claim`, `claiming`, `claimed`, `expired`, `failed`
+| #   | Value             | Set when                                                                                                | Terminal |
+| --- | ----------------- | ------------------------------------------------------------------------------------------------------- | -------- |
+| 1   | `initializing`    | a row is written before Stellar or the contract is touched, so a failed creation is still traceable     | no       |
+| 2   | `pending_payment` | `createEphemeralAccount` succeeded on Horizon and on the contract                                       | no       |
+| 3   | `pending_claim`   | the funding payment is confirmed on-chain                                                               | no       |
+| 4   | `claiming`        | a redemption holds the row lock for this account                                                        | no       |
+| 5   | `partial_sweep`   | the contract authorized the sweep but the Horizon payment failed, or a redemption stalled in `claiming` | no       |
+| 6   | `claimed`         | sweep and payment both succeeded                                                                        | **yes**  |
+| 7   | `expired`         | the expiry job ran past `expiresAt`                                                                     | **yes**  |
+| 8   | `failed`          | creation, initialization, or payment monitoring failed                                                  | **yes**  |
+
+Where the order came from: `1718100000000-CreateAccountsTable` created five
+values (`pending_payment`, `pending_claim`, `claimed`, `expired`, `failed`);
+`1718100002000` added `initializing BEFORE 'pending_payment'`;
+`1718100004000` added `claiming AFTER 'pending_claim'`; and `1718100008000`
+added `partial_sweep AFTER 'claiming'`. Each of those migrations also rewrites
+existing rows on the way down, so the value set and the data move together.
+
+## Account Status Transitions
+
+Every allowed transition is enumerated exactly once, in code:
+[`src/modules/accounts/enums/account-status-transitions.ts`](../src/modules/accounts/enums/account-status-transitions.ts).
+Anything not in that map is rejected by `assertValidAccountStatusTransition`,
+and `account-status-transitions.spec.ts` asserts that every enum value appears
+as a key and that no terminal state has an outgoing edge — so adding a status
+without adding its transitions fails the suite rather than producing a status
+nothing can leave.
+
+```text
+initializing ──► pending_payment ──► pending_claim ──► claiming ──► claimed
+     │                 │                  │              │  ▲
+     │                 │                  │              │  └── retry ──┐
+     │                 │                  │              ▼             │
+     │                 │                  │        partial_sweep ──────┘
+     │                 │                  │              │
+     └─────────────────┴──────────────────┴──────────────┴──► failed
+
+pending_payment ─┐
+pending_claim  ──┴──► expired        claimed / expired / failed: terminal
+```
+
+| From                           | To                | Trigger                                                                                                                                                                               | How the write is guarded                                                                                                            |
+| ------------------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `initializing`                 | `pending_payment` | account creation succeeded on both Horizon and the contract                                                                                                                           | `assert` — `accounts.service.ts`                                                                                                    |
+| `initializing`                 | `failed`          | creation threw; or the INITIALIZING cleanup found the row older than `INITIALIZING_TIMEOUT_MS` (600000 ms by default)                                                                 | `assert` — `accounts.service.ts`, `scheduler.service.ts`                                                                            |
+| `pending_payment`              | `pending_claim`   | the funding payment is confirmed                                                                                                                                                      | conditional update `WHERE status = 'pending_payment'` — `payment-monitor.service.ts`; also written by `payment-monitor-provider.ts` |
+| `pending_payment`              | `expired`         | expiry job, past `expiresAt`                                                                                                                                                          | `assert` — `scheduler.service.ts`                                                                                                   |
+| `pending_payment`              | `failed`          | payment monitoring failed for this account                                                                                                                                            | plain update — `payment-monitor-provider.ts`                                                                                        |
+| `pending_claim`                | `claiming`        | a redemption took the row lock (`SELECT … FOR UPDATE`)                                                                                                                                | `assert` — `claim-redemption.provider.ts`                                                                                           |
+| `pending_claim`                | `expired`         | expiry job, past `expiresAt`                                                                                                                                                          | `assert` — `scheduler.service.ts`                                                                                                   |
+| `claiming`                     | `claimed`         | sweep and Horizon payment both succeeded                                                                                                                                              | `assert` — `claim-redemption.provider.ts`                                                                                           |
+| `claiming`                     | `partial_sweep`   | the contract authorized the sweep but the Horizon payment failed; or the reconciler found the row stalled in `claiming` past `SWEEP_RECONCILIATION_TIMEOUT_MS`                        | `assert` on the redemption path; plain update in `scheduler.service.ts` for the stalled-row path                                    |
+| `claiming`                     | `pending_claim`   | a failed redemption released the slot so the same token can be retried — deliberately not taken when the attempt began in `partial_sweep`, because the contract is already in `Swept` | plain update — `claim-redemption.provider.ts`                                                                                       |
+| `partial_sweep`                | `claiming`        | a retry of a partially swept account took the row lock                                                                                                                                | `assert` — `claim-redemption.provider.ts`                                                                                           |
+| `partial_sweep`                | `claimed`         | the retry's Horizon payment succeeded                                                                                                                                                 | `assert` — `claim-redemption.provider.ts`                                                                                           |
+| `partial_sweep`                | `failed`          | allowed by the map; no code path writes it today                                                                                                                                      | —                                                                                                                                   |
+| `claimed`, `expired`, `failed` | —                 | terminal: no outgoing transitions                                                                                                                                                     | the spec asserts these stay empty                                                                                                   |
+
+The same rule holds for `pending_claim → failed`: the map permits it, nothing
+writes it yet. Those two edges are the map being deliberately wider than the
+current code, so a future failure path has a legal transition to use.
+
+### Three ways these writes are guarded, and what each one can detect
+
+Worth knowing before adding a fourth status, because only the first style
+notices a drift:
+
+1. **`assertValidAccountStatusTransition(from, to)`** before the write — the
+   redemption, creation, expiry, and initialization-cleanup paths. This is the
+   only style that fails loudly when the row is in a state the guard did not
+   expect.
+2. **A conditional `UPDATE … WHERE status = '<expected>'`** — the payment
+   monitor's `pending_payment → pending_claim`. The WHERE clause is the guard,
+   which makes it safe against a concurrent writer, but a mismatch affects zero
+   rows and returns quietly.
+3. **A plain update naming only the row id** — `payment-monitor-provider.ts`
+   (`→ pending_claim`, `→ failed`), the stalled-claim reconciler
+   (`→ partial_sweep`), and the redemption failure revert
+   (`→ pending_claim` / `→ partial_sweep`). Every one of these writes a
+   transition the map allows, so the state machine stays correct; what they
+   cannot do is detect that the row was somewhere unexpected, because they never
+   read the current status.
+
+### Keeping this in sync
+
+Adding a status or a transition is a four-place change, and skipping any one of
+them is what produced this document's gap in the first place:
+
+1. `account-status.enum.ts` — the new value. The existing values keep their
+   spelling: the string is what the database type stores.
+2. A migration that adds the value with `BEFORE`/`AFTER` to place it in the
+   type's order, since `ALTER TYPE … ADD VALUE` appends otherwise.
+3. `ACCOUNT_STATUS_TRANSITIONS` — the edges into and out of it. The spec fails
+   if a status has no entry, and a terminal state with an outgoing edge fails
+   too.
+4. This page — the value table, the transition table, and the guard style of any
+   new write path.
 
 ## Connection Pool Configuration
 
@@ -102,7 +201,7 @@ issue #472 audit trail.
 
 ### Index design notes (EXPLAIN ANALYZE audit)
 
-- The **composite indexes on `accounts`** use `status` as the leading column because it is a low-cardinality enum (7 values) that prunes the candidate set effectively before the timestamp column filters further. PostgreSQL can also use `IDX_accounts_status_expiresAt` and `IDX_accounts_status_createdAt` as left-prefix scans for status-only queries.
+- The **composite indexes on `accounts`** use `status` as the leading column because it is a low-cardinality enum (8 values) that prunes the candidate set effectively before the timestamp column filters further. PostgreSQL can also use `IDX_accounts_status_expiresAt` and `IDX_accounts_status_createdAt` as left-prefix scans for status-only queries.
 - `IDX_accounts_status` (single-column) is retained alongside the composites to support `EXPLAIN ANALYZE`-verified single-predicate queries.
 - All indexes use the default B-tree access method, which supports equality, range (`<`, `>`), and `ORDER BY` optimisations.
 
