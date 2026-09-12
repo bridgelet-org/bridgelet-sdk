@@ -21,10 +21,14 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           node-version: '20'
-          cache: 'npm'
 
       - name: Install Dependencies
-        run: npm ci
+        # No lockfile is tracked in this repository, so the previous
+        # `cache: npm` (which reads one) and `npm ci` (which requires one)
+        # failed before a single check ran. Install the way a developer
+        # does until a package-lock.json is committed, at which point both
+        # can go back to `npm ci` and caching.
+        run: npm install --no-audit --no-fund
 
       - name: Check Formatting
 
