@@ -44,14 +44,7 @@ jobs:
         run: |
           if [ -f coverage/coverage-summary.json ]; then
             echo "=== Coverage Summary ==="
-            python3 -c "
-import json, sys
-with open('coverage/coverage-summary.json') as f:
-    d = json.load(f)['total']
-for k in ['lines', 'statements', 'functions', 'branches']:
-    pct = d[k]['pct']
-    print(f'{k}: {pct}%')
-"
+            node -e 'const total = require("./coverage/coverage-summary.json").total; ["lines", "statements", "functions", "branches"].forEach((key) => console.log(key + ": " + total[key].pct + "%"));'
           else
             echo "Coverage summary not available."
           fi
