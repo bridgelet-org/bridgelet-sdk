@@ -3,6 +3,11 @@ import {
   formatEnvProblemReport,
   validateEnv,
 } from './env-validation.js';
+import { Keypair } from '@stellar/stellar-sdk';
+
+// Generated per run. The checks below only care about the Stellar key formats,
+// and a fixture is not worth a secret-shaped literal in the repository.
+const FUNDING_KEYPAIR = Keypair.random();
 
 /** A production environment with nothing wrong with it. */
 const VALID_PRODUCTION_ENV = {
@@ -14,10 +19,8 @@ const VALID_PRODUCTION_ENV = {
   DATABASE_NAME: 'bridgelet',
   JWT_SECRET: 'a'.repeat(48),
   ENCRYPTION_KEY: 'b'.repeat(64),
-  FUNDING_ACCOUNT_SECRET:
-    'SCVJKOR4QM4BWVT4XLLB22QZ6WTCDYMKZ22E4KWYNVIOXPCFTELJHFBE',
-  RECOVERY_ACCOUNT_PUBLIC:
-    'GABP5GQ5YFP32FRMCQYDVPHUB2AZZ2EVQEGT3RH3FB3XM3NXNPI36ZDQ',
+  FUNDING_ACCOUNT_SECRET: FUNDING_KEYPAIR.secret(),
+  RECOVERY_ACCOUNT_PUBLIC: FUNDING_KEYPAIR.publicKey(),
   EPHEMERAL_ACCOUNT_CONTRACT_ID:
     'CADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP5KR',
   STELLAR_SWEEP_CONTROLLER_CONTRACT_ID:
@@ -114,12 +117,9 @@ describe('production-only rules', () => {
   it('rejects identifiers that are not valid Stellar keys', () => {
     const config = {
       ...VALID_PRODUCTION_ENV,
-      FUNDING_ACCOUNT_SECRET:
-        'SCVJKOR4QM4BWVT4XLLB22QZ6WTCDYMKZ22E4KWYNVIOXPCFTELJHFEE',
-      RECOVERY_ACCOUNT_PUBLIC:
-        'GABP5GQ5YFP32FRMCQYDVPHUB2AZZ2EVQEGT3RH3FB3XM3NXNPI36ZDX',
-      EPHEMERAL_ACCOUNT_CONTRACT_ID:
-        'CADQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQOBYHA4DQP5KX',
+      FUNDING_ACCOUNT_SECRET: 'not-a-stellar-secret-seed',
+      RECOVERY_ACCOUNT_PUBLIC: 'not-a-stellar-public-key',
+      EPHEMERAL_ACCOUNT_CONTRACT_ID: 'not-a-contract-id',
     };
 
     const problems = collectEnvProblems(config);
@@ -197,7 +197,7 @@ describe('rules that run in every environment', () => {
 });
 
 describe('the e2e mocks stay bootable', () => {
-  it('accepts the mock identifiers the concurrency suite boots AppModule with', () => {
+  it('accepts the Stellar-shaped mocks the concurrency suite boots AppModule with', () => {
     const config = {
       NODE_ENV: 'test',
       DATABASE_HOST: '127.0.0.1',
@@ -207,8 +207,7 @@ describe('the e2e mocks stay bootable', () => {
       DATABASE_NAME: 'bridgelet_accounts_concurrency_test',
       JWT_SECRET: 'e2e-jwt-secret',
       ENCRYPTION_KEY: 'a'.repeat(64),
-      FUNDING_ACCOUNT_SECRET:
-        'SC6I4SO5DXZWCOTMQ4IZZXLSJ2QTLU5HTMH4F6G3R7GOWT2RXCQJDXGZ',
+      FUNDING_ACCOUNT_SECRET: FUNDING_KEYPAIR.secret(),
       RECOVERY_ACCOUNT_PUBLIC:
         'GBMOCKRECOVERYACCOUNTXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
       EPHEMERAL_ACCOUNT_CONTRACT_ID:
