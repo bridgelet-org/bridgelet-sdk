@@ -22,4 +22,15 @@ export interface TransactionResult {
   ledger: number;
   successful: boolean;
   timestamp: Date;
+  /**
+   * Indicates whether the transaction result originated from a fee-bump transaction
+   * (e.g., used to accelerate stuck sweeps during network congestion).
+   * Populated for audit tracking and accounting reconciliation.
+   */
+  isFeeBump?: boolean;
+  /**
+   * Optional inner transaction hash if this result was fee-bumped.
+   * Useful for audit tracking and correlating the original transaction envelope.
+   */
+  innerTransactionHash?: string;
 }

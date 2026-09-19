@@ -33,6 +33,8 @@ interface MockTransactionResult {
   hash: string;
   ledger: number;
   successful: boolean;
+  fee_bump_transaction?: { hash: string };
+  inner_transaction_hash?: string;
 }
 
 interface MockTransaction {
@@ -1745,6 +1747,80 @@ describe('TransactionProvider', () => {
         expect(err.message).toContain('Invalid asset format');
         expect(err.message).toContain('INVALID_FORMAT');
       }
+    });
+  });
+
+  describe('fee-bump detection in TransactionResult', () => {
+    it('should set isFeeBump and innerTransactionHash when Horizon returns fee_bump_transaction', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'fee-bump-outer-hash',
+        ledger: 12345,
+        successful: true,
+        fee_bump_transaction: { hash: 'inner-hash-999' },
+      });
+
+      const result = await provider.executeSweepTransaction({
+        ephemeralSecret: 'S_VALID_SECRET',
+        destinationAddress: 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337',
+        amount: '50.0',
+        asset: 'native',
+      });
+
+      expect(result.isFeeBump).toBe(true);
+      expect(result.innerTransactionHash).toBe('inner-hash-999');
+      expect(result.hash).toBe('fee-bump-outer-hash');
+    });
+
+    it('should set isFeeBump when Horizon returns inner_transaction_hash', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'outer-hash-777',
+        ledger: 54321,
+        successful: true,
+        inner_transaction_hash: 'inner-tx-hash-777',
+      });
+
+      const result = await provider.executeSweepTransaction({
+        ephemeralSecret: 'S_VALID_SECRET',
+        destinationAddress: 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337',
+        amount: '50.0',
+        asset: 'native',
+      });
+
+      expect(result.isFeeBump).toBe(true);
+      expect(result.innerTransactionHash).toBe('inner-tx-hash-777');
+    });
+
+    it('should not set isFeeBump when standard non-fee-bump transaction is submitted', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'standard-tx-hash',
+        ledger: 100,
+        successful: true,
+      });
+
+      const result = await provider.executeSweepTransaction({
+        ephemeralSecret: 'S_VALID_SECRET',
+        destinationAddress: 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337',
+        amount: '50.0',
+        asset: 'native',
+      });
+
+      expect(result.isFeeBump).toBeUndefined();
+      expect(result.innerTransactionHash).toBeUndefined();
     });
   });
 });

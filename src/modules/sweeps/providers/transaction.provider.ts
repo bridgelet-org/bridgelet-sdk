@@ -95,11 +95,25 @@ export class TransactionProvider {
       if (Number.isNaN(ledger)) {
         throw new Error(`Invalid ledger value: ${result.ledger}`);
       }
+
+      const rawResult = result as unknown as {
+        fee_bump_transaction?: { hash: string };
+        inner_transaction_hash?: string;
+      };
+      const isFeeBump = Boolean(
+        rawResult.fee_bump_transaction || rawResult.inner_transaction_hash,
+      );
+      const innerTransactionHash =
+        rawResult.inner_transaction_hash ||
+        rawResult.fee_bump_transaction?.hash;
+
       return {
         hash: result.hash,
         ledger: ledger,
         successful: result.successful,
         timestamp: new Date(),
+        ...(isFeeBump && { isFeeBump: true }),
+        ...(innerTransactionHash && { innerTransactionHash }),
       };
     } catch (error) {
       const typedError = error as HorizonErrorResponse;
@@ -160,11 +174,24 @@ export class TransactionProvider {
 
       this.logger.log(`Account merge successful: ${result.hash}`);
 
+      const rawResult = result as unknown as {
+        fee_bump_transaction?: { hash: string };
+        inner_transaction_hash?: string;
+      };
+      const isFeeBump = Boolean(
+        rawResult.fee_bump_transaction || rawResult.inner_transaction_hash,
+      );
+      const innerTransactionHash =
+        rawResult.inner_transaction_hash ||
+        rawResult.fee_bump_transaction?.hash;
+
       return {
         hash: result.hash,
         ledger: result.ledger,
         successful: result.successful,
         timestamp: new Date(),
+        ...(isFeeBump && { isFeeBump: true }),
+        ...(innerTransactionHash && { innerTransactionHash }),
       };
     } catch (error) {
       // Account merge can fail if account still has offers or trustlines
