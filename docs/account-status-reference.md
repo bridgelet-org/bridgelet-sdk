@@ -6,16 +6,16 @@ Full current values of `AccountStatus`
 sync with — it's missing `partial_sweep`, added in
 `1718100008000-AddPartialSweepToAccountStatus.ts`.
 
-| Value | Meaning |
-|---|---|
-| `initializing` | Account row created; funding not yet confirmed. |
-| `pending_payment` | Waiting for the incoming funding payment. |
-| `pending_claim` | Funded; ready for a claim/redemption attempt. |
-| `claiming` | A claim is in progress (locked to prevent concurrent claims). |
-| `partial_sweep` | Sweep's on-chain contract step succeeded but the Horizon payment failed; safe to retry without re-authorizing the contract. |
-| `claimed` | Claim completed successfully; terminal. |
-| `expired` | Account expired before being claimed (set by the scheduler); terminal. |
-| `failed` | Unrecoverable error (e.g. funding account exhausted); terminal. |
+| Value             | Meaning                                                                                                                     |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `initializing`    | Account row created; funding not yet confirmed.                                                                             |
+| `pending_payment` | Waiting for the incoming funding payment.                                                                                   |
+| `pending_claim`   | Funded; ready for a claim/redemption attempt.                                                                               |
+| `claiming`        | A claim is in progress (locked to prevent concurrent claims).                                                               |
+| `partial_sweep`   | Sweep's on-chain contract step succeeded but the Horizon payment failed; safe to retry without re-authorizing the contract. |
+| `claimed`         | Claim completed successfully; terminal.                                                                                     |
+| `expired`         | Account expired before being claimed (set by the scheduler); terminal.                                                      |
+| `failed`          | Unrecoverable error (e.g. funding account exhausted); terminal.                                                             |
 
 ## Valid transitions
 

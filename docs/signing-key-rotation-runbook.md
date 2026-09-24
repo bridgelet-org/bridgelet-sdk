@@ -3,7 +3,7 @@
 Operator-facing steps for rotating the KMS key used to wrap sweep signing
 material. Engineering support for this lives in
 `src/common/crypto/kms-key.provider.ts` (see the data-key re-wrap method).
-This is a checklist for *performing* a rotation, not for implementing it.
+This is a checklist for _performing_ a rotation, not for implementing it.
 
 ## Before you start
 
