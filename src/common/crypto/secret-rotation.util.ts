@@ -31,7 +31,10 @@ export class SecretRotationUtil {
     previousKey: string,
     newKey: string,
   ): string {
-    const plaintext = SecretEncryptionUtil.decrypt(encryptedString, previousKey);
+    const plaintext = SecretEncryptionUtil.decrypt(
+      encryptedString,
+      previousKey,
+    );
     return SecretEncryptionUtil.encrypt(plaintext, newKey);
   }
 }

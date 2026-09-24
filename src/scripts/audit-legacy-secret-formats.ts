@@ -31,7 +31,6 @@ export function auditLegacySecretFormats(
   for (const value of encryptedValues) {
     byFormat[SecretEncryptionUtil.classify(value)]++;
   }
-  const legacyCount =
-    byFormat['unprefixed-aes'] + byFormat['legacy-base64'];
+  const legacyCount = byFormat['unprefixed-aes'] + byFormat['legacy-base64'];
   return { total: encryptedValues.length, byFormat, legacyCount };
 }
