@@ -185,13 +185,15 @@ describe('CreateAccountDto — asset_issuer', () => {
 });
 
 // ─── asset_code / asset_issuer combinations ────────────────────────────────
-// AccountsService.create() derives `asset` as `${asset_code}:${asset_issuer}`
-// only when BOTH are present, else falls back to `asset_code ?? 'native'` —
-// silently dropping a lone asset_issuer. These tests document the current
-// DTO-level validation gap: asset_issuer's @ValidateIf only fires when
-// asset_code is set, so a lone asset_issuer passes validation untouched.
+// asset_issuer's @ValidateIf only requires it when asset_code is set, so:
+// - asset_code alone correctly fails validation (asset_issuer required) —
+//   AccountsService.create() would otherwise fall back to `asset_code` as a
+//   bare string with no issuer.
+// - asset_issuer alone passes validation untouched (the actual gap):
+//   AccountsService.create() then falls back to `asset_code ?? 'native'`,
+//   silently dropping the issuer entirely.
 describe('CreateAccountDto — asset_code/asset_issuer combination', () => {
-  it('does not flag asset_issuer when asset_code is missing (validation gap)', async () => {
+  it('does not flag asset_issuer when asset_code is missing (silently dropped later)', async () => {
     const errors = await errorsFor({
       asset_code: undefined,
       asset_issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
@@ -200,12 +202,12 @@ describe('CreateAccountDto — asset_code/asset_issuer combination', () => {
     expect(errors).not.toContain('asset_code');
   });
 
-  it('does not flag asset_code when asset_issuer is missing', async () => {
+  it('flags asset_issuer as required when asset_code is provided alone', async () => {
     const errors = await errorsFor({
       asset_code: 'USDC',
       asset_issuer: undefined,
     });
     expect(errors).not.toContain('asset_code');
-    expect(errors).not.toContain('asset_issuer');
+    expect(errors).toContain('asset_issuer');
   });
 });
