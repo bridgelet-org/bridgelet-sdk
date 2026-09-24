@@ -28,11 +28,18 @@ export class WebhooksService {
     return this.toResponseDto(saved);
   }
 
-  async findAll(): Promise<WebhookResponseDto[]> {
-    const webhooks = await this.webhookRepository.find({
-      where: { isActive: true },
-    });
-    return webhooks.map((w) => this.toResponseDto(w));
+  async findAll(
+    limit = 50,
+    offset = 0,
+  ): Promise<{ webhooks: WebhookResponseDto[]; total: number }> {
+    const query = this.webhookRepository
+      .createQueryBuilder('webhook')
+      .where('webhook.isActive = :isActive', { isActive: true })
+      .skip(offset)
+      .take(Math.min(limit, 100));
+
+    const [webhooks, total] = await query.getManyAndCount();
+    return { webhooks: webhooks.map((w) => this.toResponseDto(w)), total };
   }
 
   async update(id: string, dto: UpdateWebhookDto): Promise<WebhookResponseDto> {
@@ -54,6 +61,14 @@ export class WebhooksService {
 
     if (dto.description !== undefined) {
       webhook.description = dto.description;
+    }
+
+    if (dto.isActive !== undefined) {
+      webhook.isActive = dto.isActive;
+    }
+
+    if (dto.secret !== undefined) {
+      webhook.secret = dto.secret;
     }
 
     const updatedWebhook = await this.webhookRepository.save(webhook);
