@@ -6,13 +6,13 @@ going stale.
 
 ## Cross-reference
 
-| Finding (SECURITY_AUDIT.md) | Tracking issue | Status |
-|---|---|---|
-| Secret-key base64 encryption | Original flagged issue (pre-existing) | Remediated |
-| Broader secrets-at-rest audit | #547 | Closed by this PR |
-| Dependency vulnerability scanning gate | #548 | Closed by this PR |
-| API key rotation/revocation | #549 | Closed by this PR |
-| Webhook secret encryption-at-rest gap | Not yet filed | Open — needs new issue |
+| Finding (SECURITY_AUDIT.md)            | Tracking issue                        | Status                 |
+| -------------------------------------- | ------------------------------------- | ---------------------- |
+| Secret-key base64 encryption           | Original flagged issue (pre-existing) | Remediated             |
+| Broader secrets-at-rest audit          | #547                                  | Closed by this PR      |
+| Dependency vulnerability scanning gate | #548                                  | Closed by this PR      |
+| API key rotation/revocation            | #549                                  | Closed by this PR      |
+| Webhook secret encryption-at-rest gap  | Not yet filed                         | Open — needs new issue |
 
 ## Process going forward
 
