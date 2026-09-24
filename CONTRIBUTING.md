@@ -208,6 +208,12 @@ When you open a PR, our CI will automatically run:
 ./scripts/generate-migrations.sh --yes
 ```
 
+The script refuses to run while `src/database/migrations/` has uncommitted changes
+(`git status --porcelain` pre-flight check), since it would otherwise delete any
+migration file you have hand-edited or not yet committed. Commit or stash first, or
+re-run with `./scripts/generate-migrations.sh --yes --force` to overwrite
+deliberately.
+
 ### Adding a new migration
 
 1. Generate the file with the TypeORM CLI as usual:
@@ -220,7 +226,7 @@ When you open a PR, our CI will automatically run:
 
 2. Write the `up()`/`down()` logic and confirm it locally (`npm run migration:run`, `npm run migration:revert`).
 3. **Add the new file's contents into `scripts/generate-migrations.sh`** as its own `cat > "$MIGRATIONS_DIR/<file>.ts" <<'MIGRATION_EOF' ... MIGRATION_EOF` block, in timestamp order, so the script stays the single source of truth for the folder.
-4. Run `./scripts/generate-migrations.sh --yes` and confirm `git diff` is empty — that's your proof the script and the folder agree.
+4. Run `./scripts/generate-migrations.sh --yes` and confirm `git diff` is empty — that's your proof the script and the folder agree. (If the new file is still uncommitted, commit it first, or pass `--force` to acknowledge the overwrite.)
 5. Update the migration list in [`README.md`](./README.md#installation) to include the new file.
 
 ### Notes on timestamps
