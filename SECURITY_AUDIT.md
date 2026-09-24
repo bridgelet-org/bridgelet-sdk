@@ -20,9 +20,11 @@ already tracked for account secret keys.
 
 ## Known dependency advisories (baselined, not silently fixed)
 
-`npm audit` currently reports high-severity findings in `js-yaml`, `multer`,
-`protobufjs`, `qs`, `toml`, `typeorm`, and their parent packages
-(`@nestjs/swagger`, `@nestjs/platform-express`, `@stellar/stellar-sdk`).
+`npm audit --omit=dev` currently reports findings in `js-yaml`, `multer`,
+`protobufjs`, `qs`, `toml`, `typeorm`, `brace-expansion`, and their parent
+packages (`@nestjs/swagger`, `@nestjs/platform-express`,
+`@stellar/stellar-sdk`, `@opentelemetry/auto-instrumentations-node`,
+`@opentelemetry/propagator-jaeger`, `@opentelemetry/sdk-node`).
 These are pre-existing, tracked here rather than fixed ad hoc, and are
 exempted in `.github/workflows/dependency-audit.yml` so the new CI gate
 blocks only NEW high/critical findings. Remediating each requires a
