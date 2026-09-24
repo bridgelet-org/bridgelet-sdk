@@ -52,7 +52,8 @@ export class UpdateWebhookDto {
 
   @ApiProperty({
     required: false,
-    description: 'New secret used to sign outbound payloads (rotates the existing one)',
+    description:
+      'New secret used to sign outbound payloads (rotates the existing one)',
   })
   @IsOptional()
   @IsString()
