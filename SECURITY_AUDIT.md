@@ -18,6 +18,16 @@ already tracked for account secret keys.
 - Webhook `secret` column is not confirmed encrypted at rest, unlike account
   secret keys. Filed as a follow-up rather than fixed silently here.
 
+## Known dependency advisories (baselined, not silently fixed)
+
+`npm audit` currently reports high-severity findings in `js-yaml`, `multer`,
+`protobufjs`, `qs`, `toml`, `typeorm`, and their parent packages
+(`@nestjs/swagger`, `@nestjs/platform-express`, `@stellar/stellar-sdk`).
+These are pre-existing, tracked here rather than fixed ad hoc, and are
+exempted in `.github/workflows/dependency-audit.yml` so the new CI gate
+blocks only NEW high/critical findings. Remediating each requires a
+dependency bump (some breaking) and should be its own follow-up issue.
+
 ## Process
 
 New findings must be appended to this table with a `Status` and, once
