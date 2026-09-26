@@ -49,6 +49,18 @@ See the header comment in [`src/scripts/migrate-secrets.ts`](src/scripts/migrate
 
 Claim tokens are signed JWTs (`app.jwtSecret`). Only a SHA-256 hash of the token (`claimTokenHash`) is persisted; the raw token is returned to the caller exactly once, in the `create` response's `claimUrl`.
 
+Because a token cannot be re-issued, rotating `JWT_SECRET` without a grace window invalidates every outstanding token at once and strands the funds behind them. `JWT_SECRET_PREVIOUS` keeps the outgoing secret accepted during a rotation; see [`docs/jwt-secret-rotation-runbook.md`](docs/jwt-secret-rotation-runbook.md).
+
+## Webhook secrets
+
+A webhook `secret` is a shared HMAC key: whoever holds it can forge deliveries your receiver will accept. It is:
+
+- **validated** on input — at least 16 characters, `[A-Za-z0-9_-]` only (`CreateWebhookDto.secret`, `UpdateWebhookDto.secret`);
+- **encrypted at rest** with the same `SecretEncryptionUtil` + `KmsKeyProvider` envelope used for account secret keys, and decrypted only at the moment a delivery is signed (`WebhooksService`);
+- **write-only over the API** — `WebhookResponseDto` has no `secret` field, so it cannot be read back through `GET`/`POST`/`PUT`. A lost secret must be rotated, not recovered.
+
+Rows written before encryption was introduced hold a plaintext secret; `WebhooksService.readSecret()` detects that and keeps using them, and they are re-encrypted the next time the secret is rotated.
+
 ## Reporting a vulnerability
 
 If you discover a security issue in this repository, please do not open a public GitHub issue. Contact the maintainers directly so the issue can be triaged and fixed before disclosure.

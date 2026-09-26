@@ -1,8 +1,9 @@
 import {
   Injectable,
   BadRequestException,
-  Logger,
   ConflictException,
+  UnauthorizedException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
 import { IsNull, Repository, DataSource, EntityManager } from 'typeorm';
@@ -91,6 +92,22 @@ export class ClaimRedemptionProvider {
 
         if (!locked) {
           throw new BadRequestException('Invalid or expired claim token');
+        }
+
+        // Defence in depth on account expiry (issue #687). The scheduler is
+        // what normally moves an account to EXPIRED, so there is a window
+        // between `expiresAt` passing and the status flipping. Verifying the
+        // token up front catches the common case, but this locked read is a
+        // separate query and must not rely on that check having happened.
+        // Without it, a claim arriving in that window would attempt a sweep
+        // of an account the contract has already expired.
+        if (new Date() > locked.expiresAt) {
+          this.logger.warn(
+            `Refusing redemption for account ${locked.id}: expired at ${locked.expiresAt.toISOString()}`,
+          );
+          throw new UnauthorizedException(
+            'Claim token has expired: the account expired before it was claimed',
+          );
         }
 
         if (locked.status === AccountStatus.CLAIMED) {
