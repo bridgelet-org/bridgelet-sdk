@@ -19,6 +19,10 @@ import {
  * access patterns (by contract, by event type, by ledger, by transaction); once
  * a real consumer exists, re-validate them with EXPLAIN ANALYZE and drop
  * whichever earns nothing.
+ *
+ * Verified for #714 (duplicate of the already-resolved #653, fixed in PR #778):
+ * docs/database-schema.md records the rationale for each index plus the
+ * retention/partitioning plan this append-only table will need.
  */
 @Index('IDX_contract_events_contract_address_ledger_sequence', [
   'contractAddress',

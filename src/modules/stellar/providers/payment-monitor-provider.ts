@@ -50,6 +50,8 @@ import { AccountStatus } from '../../accounts/enums/account-status.enum.js';
  * stream misses (dropped connection, restart before `restoreActiveStreams()`).
  * Treat the stream as the low-latency path and the poller as the backstop, and
  * keep any new detection logic idempotent in the same two ways.
+ *
+ * Verified for #713 (duplicate of the already-resolved #652, fixed in PR #778).
  */
 
 @Injectable()

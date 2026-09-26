@@ -9,6 +9,8 @@ This is the authoritative description of the flow. It previously existed only as
 a comment on `SweepsService.executeSweep`, so it had to be reverse-engineered
 from code (#651).
 
+> Verified for #712 (duplicate of the already-resolved #651, fixed in PR #778).
+
 The order of operations is strict and intentional:
 
 1. **Validate** - `ValidationProvider.validateSweepParameters()` checks the
