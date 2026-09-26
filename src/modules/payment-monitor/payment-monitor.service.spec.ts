@@ -378,30 +378,3 @@ describe('PaymentMonitorService', () => {
     });
   });
 });
-
-
-
-//   describe('amount parsing (via processPayment)', () => {
-//     it('converts "100.0000000" → 1_000_000_000n stroops', async () => {
-//       const account = makeAccount();
-//       const payment = makePaymentRecord({ amount: '100.0000000' });
-
-//       await service.processPayment(account, payment);
-
-//       expect(stellarService.recordPayment).toHaveBeenCalledWith(
-//         expect.objectContaining({ amount: 1_000_000_000n }),
-//       );
-//     });
-
-//     it('converts "1.5000000" → 15_000_000n stroops', async () => {
-//       const account = makeAccount();
-//       const payment = makePaymentRecord({ amount: '1.5000000' });
-
-//       await service.processPayment(account, payment);
-
-//       expect(stellarService.recordPayment).toHaveBeenCalledWith(
-//         expect.objectContaining({ amount: 15_000_000n }),
-//       );
-//     });
-//   });
-// });
