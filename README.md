@@ -136,7 +136,17 @@ npm run start:dev
 
 # Same, but skip the confirmation prompt (useful in CI)
 ./scripts/generate-migrations.sh --yes
+
+# Skip the prompt AND overwrite uncommitted changes in the migrations folder
+# (only needed when you deliberately want to discard hand-edited migrations)
+./scripts/generate-migrations.sh --yes --force
 ```
+
+Before deleting anything, the script runs a pre-flight `git status --porcelain` check
+against `src/database/migrations/` and aborts if it finds uncommitted changes there
+(modified, staged, or untracked files) — the rewrite would otherwise silently destroy
+them. Commit or stash your migration work first, or pair `--yes` with `--force` to
+overwrite deliberately.
 
 This does **not** apply migrations to a database — it only (re)writes the `.ts` files. Run `npm run migration:run` afterwards as usual. See [`CONTRIBUTING.md`](./CONTRIBUTING.md#database-migrations) for the workflow to follow when adding a _new_ migration.
 
