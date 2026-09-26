@@ -28,6 +28,11 @@ const sweepFailureCounter = makeCounterProvider({
  *
  * If a provider here ever needs request-scoped state, hold that state in the
  * method arguments rather than changing the provider's scope.
+ *
+ * Verified for #711 (duplicate of the already-resolved #650, fixed in PR #781):
+ * no provider declares `Scope.REQUEST`, so the instances above - and the
+ * Stellar connections they open in their constructors - are created once per
+ * process rather than once per request.
  */
 @Module({
   imports: [TypeOrmModule.forFeature([Account]), StellarModule],
