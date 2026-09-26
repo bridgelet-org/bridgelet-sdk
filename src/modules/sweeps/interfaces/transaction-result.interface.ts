@@ -35,6 +35,8 @@ export interface TransactionResult {
    *
    * Always set, so `false` positively means "not fee-bumped" instead of
    * "nobody populated this".
+   *
+   * Verified for #710 (duplicate of the already-resolved #649, fixed in PR #781).
    */
   feeBump: boolean;
 
