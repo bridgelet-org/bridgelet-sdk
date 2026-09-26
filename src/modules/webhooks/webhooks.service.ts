@@ -6,8 +6,10 @@ import { Webhook } from './entities/webhook.entity.js';
 import { CreateWebhookDto } from './dto/create-webhook.dto.js';
 import { UpdateWebhookDto } from './dto/update-webhook.dto.js';
 import { WebhookResponseDto } from './dto/webhook-response.dto.js';
+<<<<<<< HEAD
 import { KmsKeyProvider } from '../../common/crypto/kms-key.provider.js';
 import { SecretEncryptionUtil } from '../../common/crypto/secret-encryption.util.js';
+import { parsePagination } from '../../common/utils/pagination.util.js';
 
 /**
  * WebhooksService
@@ -50,15 +52,31 @@ export class WebhooksService {
     return this.toResponseDto(saved);
   }
 
+  /**
+   * Returns active subscriptions, paginated.
+   *
+   * `limit`/`offset` are normalised by `parsePagination`, which rejects
+   * non-integer input with a 400 and clamps out-of-range values. Without it a
+   * `?limit=abc` reached TypeORM as `NaN` and surfaced as a 500 from the
+   * query builder.
+   *
+   * The explicit `ORDER BY createdAt, id` matters: without a deterministic
+   * order PostgreSQL may return matching rows in any order, so a row could
+   * appear on two consecutive pages or on neither as the table changes.
+   */
   async findAll(
-    limit = 50,
-    offset = 0,
+    limit?: number | string,
+    offset?: number | string,
   ): Promise<{ webhooks: WebhookResponseDto[]; total: number }> {
+    const page = parsePagination(limit, offset);
+
     const query = this.webhookRepository
       .createQueryBuilder('webhook')
       .where('webhook.isActive = :isActive', { isActive: true })
-      .skip(offset)
-      .take(Math.min(limit, 100));
+      .orderBy('webhook.createdAt', 'ASC')
+      .addOrderBy('webhook.id', 'ASC')
+      .skip(page.offset)
+      .take(page.limit);
 
     const [webhooks, total] = await query.getManyAndCount();
     return { webhooks: webhooks.map((w) => this.toResponseDto(w)), total };

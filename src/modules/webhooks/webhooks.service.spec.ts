@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Logger } from '@nestjs/common';
+import { BadRequestException, Logger } from '@nestjs/common';
 import { WebhooksService } from './webhooks.service.js';
 import { Webhook } from './entities/webhook.entity.js';
 import { KmsKeyProvider } from '../../common/crypto/kms-key.provider.js';
@@ -44,6 +44,8 @@ describe('WebhooksService', () => {
   const mockQb = {
     where: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
+    orderBy: jest.fn().mockReturnThis(),
+    addOrderBy: jest.fn().mockReturnThis(),
     skip: jest.fn().mockReturnThis(),
     take: jest.fn().mockReturnThis(),
     getMany: jest.fn().mockResolvedValue([]),
@@ -153,6 +155,36 @@ describe('WebhooksService', () => {
     it('caps limit at 100', async () => {
       await service.findAll(500, 0);
       expect(mockQb.take).toHaveBeenCalledWith(100);
+    });
+
+    it('orders deterministically so pagination is stable (issue #694)', async () => {
+      // Without an explicit ORDER BY, PostgreSQL may return matching rows in
+      // any order, so a row can appear on two consecutive pages or on neither.
+      await service.findAll(50, 0);
+      expect(mockQb.orderBy).toHaveBeenCalledWith('webhook.createdAt', 'ASC');
+      // id breaks ties for rows sharing a createdAt.
+      expect(mockQb.addOrderBy).toHaveBeenCalledWith('webhook.id', 'ASC');
+    });
+
+    it('rejects a non-integer limit with a 400 (issue #694)', async () => {
+      // Without normalisation this reached TypeORM as NaN and surfaced as a
+      // 500 from the query builder.
+      await expect(service.findAll('abc', 0)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockQb.getManyAndCount).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-integer offset with a 400 (issue #694)', async () => {
+      await expect(service.findAll(50, 'nope')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockQb.getManyAndCount).not.toHaveBeenCalled();
+    });
+
+    it('clamps a negative offset to 0 rather than erroring', async () => {
+      await service.findAll(50, -10);
+      expect(mockQb.skip).toHaveBeenCalledWith(0);
     });
   });
 
