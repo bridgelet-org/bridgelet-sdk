@@ -18,6 +18,8 @@ The current schema is created entirely through the migrations in `src/database/m
 
 ### Account Status Lifecycle (issue #639)
 
+> Verified for #700 (duplicate of the already-resolved #639, fixed in PR #774).
+
 State transitions driven by `AccountsService`, `ClaimRedemptionProvider`,
 and `SchedulerService`:
 

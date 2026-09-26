@@ -3,6 +3,7 @@ import { ClaimVerificationResponseDto } from './claim-verification-response.dto.
 // Defense-in-depth: pins the serialized key set for ClaimVerificationResponseDto
 // so a future field added to the underlying claim/account entity can't silently
 // leak (e.g. a raw token or secret) through this API response shape.
+// Verified for #705 (duplicate of the already-resolved #644, fixed in PR #772).
 describe('ClaimVerificationResponseDto', () => {
   it('only exposes the expected, allow-listed keys', () => {
     const dto = new ClaimVerificationResponseDto();

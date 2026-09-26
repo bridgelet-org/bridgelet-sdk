@@ -186,6 +186,7 @@ describe('CreateAccountDto — asset_issuer', () => {
 });
 
 // ─── asset_code / asset_issuer combinations ────────────────────────────────
+// Verified for #699 (duplicate of the already-resolved #638, fixed in PR #771).
 // asset_issuer's @ValidateIf only requires it when asset_code is set, so:
 // - asset_code alone correctly fails validation (asset_issuer required) —
 //   AccountsService.create() would otherwise fall back to `asset_code` as a

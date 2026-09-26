@@ -19,6 +19,8 @@
  * `mergeAccount - Edge Cases` blocks (success, self-merge rejection, Horizon
  * failures, network errors, and the sweep-then-merge workflow).
  *
+ * Verified for #708 (duplicate of the already-resolved #647, fixed in PR #781).
+ *
  * ## Why it is not interchangeable with a payment sweep
  *
  * An `AccountMerge` deletes the source account, so unlike a payment it:
