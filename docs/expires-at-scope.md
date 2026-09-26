@@ -25,4 +25,6 @@ duration in seconds) from `CreateAccountDto`, not the derived `expiresAt`
 **Net:** the two are set from the same input but tracked separately by
 design — `expiresAt` gates API/DB behavior, the contract enforces its own
 expiry on-chain. No code change needed; this doc closes the "currently
-unused" ambiguity noted in the README.
+unused" ambiguity noted in the README (re-verified against issue #696 —
+`StellarService` has no `expiresAt`-typed parameter anywhere in its public
+API, confirming the split above is still accurate).

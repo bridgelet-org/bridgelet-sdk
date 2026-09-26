@@ -21,6 +21,11 @@ function depthOf(value: unknown, depth = 0): number {
 /**
  * Rejects metadata whose serialised size or nesting depth is too large
  * *before* it is parsed/buffered by sanitizeMetadata() (issue #640).
+ *
+ * Re-verified against #701: this class-validator decorator runs during DTO
+ * validation, ahead of sanitizeMetadata() in AccountsService.create(), so an
+ * oversized/deeply-nested payload is rejected with a 400 before it is ever
+ * buffered or walked by the sanitizer.
  */
 export function IsBoundedMetadata(options?: ValidationOptions) {
   return function (object: object, propertyName: string) {
