@@ -286,6 +286,7 @@ describe('ClaimsService Integration Tests', () => {
       ).rejects.toThrow('Sweep failed');
     });
 
+    // Verified for #707 (duplicate of the already-resolved #646, fixed in PR #772).
     it('passes concurrent redemption attempts for the same token straight through without deduping them itself', async () => {
       // ClaimsService is a passthrough (see file header): it must not hide a
       // double-redemption race by silently coalescing calls. Guarding the

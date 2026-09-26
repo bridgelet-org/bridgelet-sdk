@@ -182,6 +182,8 @@ export class ContractProvider {
    * deliberately not a hardcoded literal: this value is safe to surface on
    * an admin/health endpoint, so it must never claim a version the deployed
    * contract does not have (#648).
+   *
+   * Verified for #709 (duplicate of the already-resolved #648, fixed in PR #781).
    */
   public getContractInfo(): {
     contractId: string;
