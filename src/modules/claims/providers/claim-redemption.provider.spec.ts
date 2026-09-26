@@ -258,8 +258,11 @@ describe('ClaimRedemptionProvider', () => {
     });
   });
 
-  // Issue #641: sweep.completed/sweep.failed must each fire exactly once,
-  // and never both, for a single redemption.
+  // Issue #641 (re-verified against #702): sweep.completed/sweep.failed must
+  // each fire exactly once, and never both, for a single redemption. The two
+  // triggers sit in mutually-exclusive branches (success vs. catch), and the
+  // isPartial branch returns before either can run, so at most one of
+  // sweep.completed/sweep.failed/sweep.partial fires per redemption attempt.
   describe('redeemClaim - webhook exactly-once guarantees (issue #641)', () => {
     it('fires sweep.completed exactly once and never sweep.failed on success', async () => {
       await provider.redeemClaim(VALID_TOKEN, VALID_DESTINATION);
