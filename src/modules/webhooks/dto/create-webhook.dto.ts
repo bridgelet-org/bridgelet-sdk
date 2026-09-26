@@ -12,6 +12,8 @@ import { IsSafeWebhookUrl } from '../../../common/validators/safe-webhook-url.va
 export class CreateWebhookDto {
   @ApiProperty({ example: 'https://api.example.com/hooks' })
   @IsUrl({ require_tld: false })
+  // Verified for #695 (duplicate of the already-resolved #634, fixed in PR #776):
+  // rejects localhost, link-local and cloud-metadata (e.g. 169.254.169.254) targets.
   @IsSafeWebhookUrl()
   url: string;
 

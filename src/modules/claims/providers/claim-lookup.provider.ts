@@ -24,6 +24,10 @@ export class ClaimLookupProvider {
     // (e.g. by an admin cleanup). This method never uses the joined
     // `account` to authorize a claim or sweep action, so it cannot be
     // used to bypass the soft-delete on those paths.
+    //
+    // Verified for #703 (duplicate of the already-resolved #642, fixed in
+    // PR #774): the claimTokenHash lookup is served by the
+    // IDX_accounts_claimTokenHash index added in AddHighTrafficIndexes.
     const claim = await this.claimsRepository.findOne({
       where: { id },
       relations: ['account'],

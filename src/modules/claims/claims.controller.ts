@@ -40,6 +40,7 @@ export class ClaimsController {
   @Post('verify')
   // Dedicated, tighter limit than the global default: this endpoint accepts a
   // raw claim token and can otherwise be used to enumerate/probe valid tokens.
+  // Verified for #704 (duplicate of the already-resolved #643, fixed in PR #772).
   @Throttle({ default: { limit: 10, ttl: 60000 } })
   @ApiOperation({ summary: 'Verify claim token validity' })
   @ApiResponse({

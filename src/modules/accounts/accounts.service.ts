@@ -221,6 +221,9 @@ export class AccountsService {
   }
 
   public async findOne(id: string): Promise<AccountResponseDto> {
+    // Soft-deleted accounts are excluded so GET /accounts/:id 404s for them,
+    // matching findAll(). Verified for #698 (duplicate of the already-resolved
+    // #637, fixed in PR #771).
     const account = await this.accountsRepository.findOne({
       where: { id, deletedAt: IsNull() },
     });
