@@ -5,6 +5,7 @@ import { randomUUID } from 'crypto';
 import { WebhooksController } from './webhooks.controller.js';
 import { WebhooksService } from './webhooks.service.js';
 import { Webhook } from './entities/webhook.entity.js';
+import { KmsKeyProvider } from '../../common/crypto/kms-key.provider.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 
 // In-memory fake repository (not a jest.fn() mock) backing real service logic.
@@ -40,6 +41,17 @@ describe('WebhooksController integration (real service + repo)', () => {
         {
           provide: getRepositoryToken(Webhook),
           useClass: InMemoryWebhookRepository,
+        },
+        {
+          // WebhooksService encrypts secrets at rest (issue #688); an identity
+          // stub keeps this spec focused on controller/service/repository
+          // wiring. webhooks.secret.spec.ts covers the real cipher.
+          provide: KmsKeyProvider,
+          useValue: {
+            getEncryptionKey: () => 'f'.repeat(64),
+            encrypt: (plain: string) => plain,
+            decrypt: (ct: string) => ct,
+          },
         },
       ],
     })

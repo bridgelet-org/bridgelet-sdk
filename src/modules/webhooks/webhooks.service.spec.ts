@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Logger } from '@nestjs/common';
 import { WebhooksService } from './webhooks.service.js';
 import { Webhook } from './entities/webhook.entity.js';
+import { KmsKeyProvider } from '../../common/crypto/kms-key.provider.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -65,6 +66,18 @@ describe('WebhooksService', () => {
         {
           provide: getRepositoryToken(Webhook),
           useValue: mockWebhookRepository,
+        },
+        {
+          // WebhooksService encrypts secrets at rest (issue #688). This stub
+          // is an identity function so the pre-existing assertions below
+          // (which compare signatures against the plaintext secret) keep
+          // holding; webhooks.secret.spec.ts covers the real AES-GCM path.
+          provide: KmsKeyProvider,
+          useValue: {
+            getEncryptionKey: () => 'f'.repeat(64),
+            encrypt: (plain: string) => plain,
+            decrypt: (ct: string) => ct,
+          },
         },
       ],
     }).compile();
