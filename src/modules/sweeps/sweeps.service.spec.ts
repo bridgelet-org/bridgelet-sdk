@@ -1,5 +1,6 @@
 import { jest } from '@jest/globals';
 import { Test, TestingModule } from '@nestjs/testing';
+import { HttpException } from '@nestjs/common';
 import { SweepsService } from './sweeps.service.js';
 import { ValidationProvider } from './providers/validation.provider.js';
 import { ContractProvider } from './providers/contract.provider.js';
@@ -301,6 +302,76 @@ describe('SweepsService', () => {
       expect(
         transactionProvider.executeSweepTransaction,
       ).not.toHaveBeenCalled();
+    });
+
+    // Issue #820: a failed Soroban simulation/contract call is deterministic —
+    // retrying cannot fix it — so it must surface as a distinct, stable error
+    // code (502 SWEEP_CONTRACT_FAILED) rather than a generic 500. The raw host
+    // error stays in the logs and out of the response body.
+    it('maps a simulated contract failure to 502 SWEEP_CONTRACT_FAILED and keeps the host error in the logs', async () => {
+      const hostError = new Error(
+        'Transaction simulation failed: HostError: Error(Auth, InvalidAction)',
+      );
+      stellarService.executeSweep.mockRejectedValue(hostError);
+      const loggerErrorSpy = jest
+        .spyOn(service['logger'], 'error')
+        .mockImplementation(() => {});
+
+      let caught: unknown;
+      try {
+        await service.executeSweep(validRequest);
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(HttpException);
+      const httpError = caught as HttpException;
+      expect(httpError.getStatus()).toBe(502);
+      expect(httpError.getResponse()).toEqual(
+        expect.objectContaining({ errorCode: 'SWEEP_CONTRACT_FAILED' }),
+      );
+      // The raw host error is logged...
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('HostError: Error(Auth, InvalidAction)'),
+        hostError.stack,
+      );
+      // ...and never returned to the caller.
+      expect(JSON.stringify(httpError.getResponse())).not.toContain(
+        'HostError',
+      );
+      // The payout must not run once the contract call has failed.
+      expect(
+        transactionProvider.executeSweepTransaction,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('maps a submitted-then-rejected execute_sweep transaction to SWEEP_CONTRACT_FAILED', async () => {
+      stellarService.executeSweep.mockRejectedValue(
+        new Error('execute_sweep failed: {"status":"ERROR"}'),
+      );
+      jest.spyOn(service['logger'], 'error').mockImplementation(() => {});
+
+      let caught: unknown;
+      try {
+        await service.executeSweep(validRequest);
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(HttpException);
+      expect((caught as HttpException).getStatus()).toBe(502);
+      expect((caught as HttpException).getResponse()).toEqual(
+        expect.objectContaining({ errorCode: 'SWEEP_CONTRACT_FAILED' }),
+      );
+    });
+
+    it('does not map transient network/RPC errors — they stay retryable', async () => {
+      const networkError = new Error('fetch failed: ECONNRESET');
+      stellarService.executeSweep.mockRejectedValue(networkError);
+
+      await expect(service.executeSweep(validRequest)).rejects.toThrow(
+        'fetch failed: ECONNRESET',
+      );
     });
 
     // Regression: prior behaviour propagated Horizon payment errors.

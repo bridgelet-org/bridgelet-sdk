@@ -230,7 +230,7 @@ SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
 # Smart contracts
 EPHEMERAL_ACCOUNT_CONTRACT_ID=CXXXX...   # shared ID; still used by payment monitor, sweeps and ContractProvider (NOT by account creation)
 EPHEMERAL_ACCOUNT_WASM_HASH=<64 hex>      # required (except NODE_ENV=test): each account's own contract instance is deployed from this WASM hash
-SWEEP_CONTROLLER_CONTRACT_ID=CXXXX...
+SWEEP_CONTROLLER_CONTRACT_ID=CXXXX...    # SweepController that authorizes sweeps; redeploys produce a NEW ID (see below)
 
 # Security
 JWT_SECRET=your-secret-key
@@ -239,7 +239,16 @@ CLAIM_TOKEN_EXPIRY=2592000  # 30 days
 # Application
 PORT=3000
 NODE_ENV=development
+CLAIM_BASE_URL=http://localhost:3000  # base URL for claim links (`<base>/c/<token>`); production must set its own https URL
 ```
+
+> **Redeploying `SWEEP_CONTROLLER_CONTRACT_ID`.** Each ephemeral account is
+> initialized with the controller ID in effect when it was created and stores it
+> as the contract's `authorized_controller`. Changing this value therefore only
+> points **new** accounts at the new controller — existing accounts stay bound to
+> the controller they were created under and keep sweeping through it. A sweep
+> submitted for an account against a controller it is not bound to is rejected
+> on-chain; the SDK surfaces that as HTTP `502 SWEEP_CONTRACT_FAILED`.
 
 ## API Documentation
 
