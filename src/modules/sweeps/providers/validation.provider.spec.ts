@@ -120,6 +120,40 @@ describe('ValidationProvider', () => {
       );
     });
 
+    it('should pass validation for CLAIMING status (the status a redemption holds while sweeping)', async () => {
+      jest.spyOn(repo, 'findOne').mockResolvedValue(
+        mockAccount({
+          status: AccountStatus.CLAIMING,
+          publicKey: validDto.ephemeralPublicKey,
+          amount: validDto.amount,
+        }),
+      );
+
+      await expect(
+        provider.validateSweepParameters(validDto),
+      ).resolves.toBeUndefined();
+    });
+
+    it.each([
+      AccountStatus.CLAIMED,
+      AccountStatus.EXPIRED,
+      AccountStatus.FAILED,
+      AccountStatus.PARTIAL_SWEEP,
+      AccountStatus.INITIALIZING,
+    ])('should still reject %s status', async (status) => {
+      jest.spyOn(repo, 'findOne').mockResolvedValue(
+        mockAccount({
+          status,
+          publicKey: validDto.ephemeralPublicKey,
+          amount: validDto.amount,
+        }),
+      );
+
+      await expect(provider.validateSweepParameters(validDto)).rejects.toThrow(
+        `Account cannot be swept. Status: ${status}`,
+      );
+    });
+
     it('should throw BadRequestException for PENDING_PAYMENT status', async () => {
       jest.spyOn(repo, 'findOne').mockResolvedValue(
         mockAccount({

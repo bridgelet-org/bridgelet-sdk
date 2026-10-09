@@ -59,7 +59,17 @@ export class ValidationProvider {
       throw new BadRequestException('Account has not received payment yet');
     }
 
-    if (account.status !== AccountStatus.PENDING_CLAIM) {
+    // ClaimRedemptionProvider takes the claim slot (PENDING_CLAIM or
+    // PARTIAL_SWEEP -> CLAIMING, under a row lock) BEFORE it calls
+    // SweepsService.executeSweep, so a sweep that is legitimately in progress
+    // always sees CLAIMING here. Requiring PENDING_CLAIM alone rejected every
+    // real redemption with "Account cannot be swept. Status: claiming".
+    // PENDING_CLAIM stays allowed for any direct caller that has not taken the
+    // slot; every other status (CLAIMED, EXPIRED, FAILED, ...) is still refused.
+    if (
+      account.status !== AccountStatus.PENDING_CLAIM &&
+      account.status !== AccountStatus.CLAIMING
+    ) {
       throw new BadRequestException(
         `Account cannot be swept. Status: ${account.status}`,
       );
