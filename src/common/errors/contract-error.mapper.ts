@@ -124,6 +124,58 @@ const CONTRACT_ERROR_MAP: Record<string, ContractErrorDetails> = {
 };
 
 /**
+ * Stable error code returned when a Soroban contract call fails — either during
+ * simulation (e.g. the host rejects the invocation with
+ * `Error(Auth, InvalidAction)`) or when the network rejects the submitted
+ * transaction. Unlike a transient RPC/Horizon error, retrying will not fix it,
+ * so it is surfaced distinctly instead of as a generic "try again" 500.
+ */
+export const SWEEP_CONTRACT_FAILED = 'SWEEP_CONTRACT_FAILED';
+
+/**
+ * User-facing message for {@link SWEEP_CONTRACT_FAILED}. Deliberately generic:
+ * the raw host error is kept in the logs only and never returned to callers.
+ */
+export const SWEEP_CONTRACT_FAILED_MESSAGE =
+  'The sweep was rejected by the on-chain contract. Retrying will not help; please contact support.';
+
+/**
+ * Heuristic that recognises a Soroban simulation/contract failure from the raw
+ * error string, as opposed to a transient network or RPC error.
+ *
+ * - `HostError` / `Error(Auth` / `Error(Contract` / `Error(WasmVm` come from a
+ *   failed simulation performed by `prepareTransaction`.
+ * - `simulation failed` covers the SDK's own simulation-failure wrapper.
+ * - `execute_sweep failed` is the wrapper `StellarService.executeSweep` throws
+ *   when the submitted transaction is rejected on the network.
+ */
+export function isSorobanContractFailure(raw: string): boolean {
+  return (
+    raw.includes('HostError') ||
+    raw.includes('Error(Auth') ||
+    raw.includes('Error(Contract') ||
+    raw.includes('Error(WasmVm') ||
+    raw.includes('simulation failed') ||
+    raw.includes('execute_sweep failed')
+  );
+}
+
+/**
+ * Throws the distinct HTTP 502 `SWEEP_CONTRACT_FAILED` error. The caller must
+ * log the raw host error separately; it is intentionally excluded from the
+ * response body.
+ */
+export function throwSweepContractError(): never {
+  throw new HttpException(
+    {
+      errorCode: SWEEP_CONTRACT_FAILED,
+      message: SWEEP_CONTRACT_FAILED_MESSAGE,
+    },
+    HttpStatus.BAD_GATEWAY,
+  );
+}
+
+/**
  * Parses a raw Soroban transaction error string and extracts the contract
  * error variant name.
  *

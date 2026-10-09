@@ -1,7 +1,9 @@
 import { HttpStatus } from '@nestjs/common';
 import {
+  isSorobanContractFailure,
   mapContractError,
   throwContractError,
+  throwSweepContractError,
 } from './contract-error.mapper.js';
 
 describe('mapContractError', () => {
@@ -77,6 +79,47 @@ describe('throwContractError', () => {
       };
       expect(ex.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR);
       expect(ex.getResponse().errorCode).toBe('UNKNOWN_CONTRACT_ERROR');
+    }
+  });
+});
+
+describe('isSorobanContractFailure', () => {
+  it.each([
+    'HostError: Error(Auth, InvalidAction)',
+    'Transaction simulation failed: Error(Contract, #5)',
+    'Error(WasmVm, InvalidAction)',
+    'execute_sweep failed: {"status":"ERROR"}',
+  ])('recognises a contract failure: %s', (raw) => {
+    expect(isSorobanContractFailure(raw)).toBe(true);
+  });
+
+  it.each([
+    'fetch failed: ECONNRESET',
+    'ALREADY_SWEPT',
+    'getAccount request timed out',
+  ])(
+    'does not treat a transient/unrelated error as a contract failure: %s',
+    (raw) => {
+      expect(isSorobanContractFailure(raw)).toBe(false);
+    },
+  );
+});
+
+describe('throwSweepContractError', () => {
+  it('throws an HttpException with HTTP 502 and the SWEEP_CONTRACT_FAILED code', () => {
+    try {
+      throwSweepContractError();
+      // Should never reach here.
+      expect(true).toBe(false);
+    } catch (e: unknown) {
+      const ex = e as {
+        getStatus: () => number;
+        getResponse: () => { errorCode: string; message: string };
+      };
+      expect(ex.getStatus()).toBe(HttpStatus.BAD_GATEWAY);
+      expect(ex.getResponse().errorCode).toBe('SWEEP_CONTRACT_FAILED');
+      // The response body must be a safe message, never a raw host error.
+      expect(ex.getResponse().message).not.toMatch(/HostError|Error\(/);
     }
   });
 });

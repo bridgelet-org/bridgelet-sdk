@@ -10,6 +10,10 @@ import { TransactionResult } from './interfaces/transaction-result.interface.js'
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter } from 'prom-client';
 import { SweepMetricsProvider } from './providers/sweep-metrics.provider.js';
+import {
+  isSorobanContractFailure,
+  throwSweepContractError,
+} from '../../common/errors/contract-error.mapper.js';
 
 @Injectable()
 export class SweepsService {
@@ -29,8 +33,13 @@ export class SweepsService {
   ) {}
 
   /**
-   * Execute sweep: authorize on-chain via SweepController contract, then
-   * transfer funds via a classic Horizon payment.
+   * Execute sweep: authorize the sweep on-chain via the SweepController
+   * contract, then pay out via a classic Horizon payment.
+   *
+   * The controller only authorizes the sweep and transitions the ephemeral
+   * account's on-chain state; it holds no balance and performs no token
+   * transfer. The SDK is what actually moves the funds, via the classic
+   * Horizon payment in Step 4.
    *
    * The authoritative description of the 4-step flow, including a sequence
    * diagram, lives in this module's README rather than here, so it does not
@@ -108,13 +117,33 @@ export class SweepsService {
       });
 
       // Step 3: Submit execute_sweep() on the SweepController Soroban contract
-      await this.stellarService.executeSweep({
-        sweepControllerContractId,
-        ephemeralAccountContractId,
-        destination: sweepExecutionRequest.destinationAddress,
-        authSignature,
-        signerSecret: sweepExecutionRequest.ephemeralSecret,
-      });
+      try {
+        await this.stellarService.executeSweep({
+          sweepControllerContractId,
+          ephemeralAccountContractId,
+          destination: sweepExecutionRequest.destinationAddress,
+          authSignature,
+          signerSecret: sweepExecutionRequest.ephemeralSecret,
+        });
+      } catch (error) {
+        // A Soroban simulation/contract failure (for example the host rejecting
+        // the invocation with `Error(Auth, InvalidAction)`) is deterministic:
+        // the contract rejects every retry, so surfacing it as a generic 500
+        // only makes the claim page retry uselessly (and trip the throttle).
+        // Map it to a distinct, stable 502 (SWEEP_CONTRACT_FAILED) with a safe
+        // message, and keep the raw host error in the server logs only.
+        const raw = error instanceof Error ? error.message : String(error);
+        if (isSorobanContractFailure(raw)) {
+          this.logger.error(
+            `Soroban contract failure authorizing sweep for account ` +
+              `${sweepExecutionRequest.accountId}: ${raw}`,
+            error instanceof Error ? error.stack : undefined,
+          );
+          throwSweepContractError();
+        }
+        // Transient RPC/network errors are retryable; let them propagate as-is.
+        throw error;
+      }
 
       this.logger.log(
         `Contract sweep authorized for account ${sweepExecutionRequest.accountId}`,
@@ -127,6 +156,11 @@ export class SweepsService {
     }
 
     // Step 4: Execute the classic Horizon payment to move funds.
+    // The SDK — not the contract — moves the funds here. The SweepController
+    // only authorized the sweep and marked the account swept; it holds no
+    // balance and never calls TokenClient. The payout below is a classic
+    // Horizon payment from the ephemeral account's own `G...` address (where
+    // the sender funded it).
     // We catch errors here and return a structured partial result
     // (isPartial: true) instead of propagating them: the contract may
     // already be in Swept state by this point and a thrown exception
