@@ -88,7 +88,7 @@ describe('isSorobanContractFailure', () => {
     'HostError: Error(Auth, InvalidAction)',
     'Transaction simulation failed: Error(Contract, #5)',
     'Error(WasmVm, InvalidAction)',
-    'execute_sweep failed: {"status":"ERROR"}',
+    'execute_sweep failed: {"status":"ERROR","error":"Error(Auth, InvalidAction)"}',
   ])('recognises a contract failure: %s', (raw) => {
     expect(isSorobanContractFailure(raw)).toBe(true);
   });
@@ -97,6 +97,8 @@ describe('isSorobanContractFailure', () => {
     'fetch failed: ECONNRESET',
     'ALREADY_SWEPT',
     'getAccount request timed out',
+    'execute_sweep failed: {"status":"ERROR","error":"tx_bad_seq"}',
+    'execute_sweep failed: {"status":"ERROR"}',
   ])(
     'does not treat a transient/unrelated error as a contract failure: %s',
     (raw) => {

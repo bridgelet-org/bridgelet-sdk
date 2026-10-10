@@ -20,8 +20,10 @@
  * the stubbed contract call and this test fails.
  */
 
-import { Test, TestingModule } from '@nestjs/testing';
+import { jest } from '@jest/globals';
+import { BadRequestException } from '@nestjs/common';
 import { getRepositoryToken, getDataSourceToken } from '@nestjs/typeorm';
+import { Test, TestingModule } from '@nestjs/testing';
 import { getToken } from '@willsoto/nestjs-prometheus';
 import { ConfigService } from '@nestjs/config';
 import { ClaimRedemptionProvider } from './providers/claim-redemption.provider.js';
@@ -263,11 +265,11 @@ describe('Claim redemption lifecycle (integration) [issue #820]', () => {
     expect(stellarService.executeSweep).toHaveBeenCalledTimes(1);
   });
 
-  it('would fail if the real validator rejected CLAIMING mid-flight', async () => {
-    // Sanity check of the harness itself: if the validator refuses CLAIMING,
-    // executeSweep rejects before the contract call and redemption rolls the
-    // account back to PENDING_CLAIM. This documents the regression the suite
-    // guards against.
+  it('would fail if the real validator rejected a CLAIMING account (unsupported status exercise)', async () => {
+    // Allow PENDING_CLAIM -> CLAIMING inside the locked transaction, but force
+    // the real validator to reject CLAIMING. Since the current validator accepts
+    // CLAIMING and PENDING_CLAIM, this uses a mocked override to simulate the
+    // regression case: the validator sees CLAIMING and throws.
     const realValidate = ValidationProvider.prototype.validateSweepParameters;
     jest
       .spyOn(ValidationProvider.prototype, 'validateSweepParameters')
@@ -275,10 +277,10 @@ describe('Claim redemption lifecycle (integration) [issue #820]', () => {
         this: ValidationProvider,
         request: Parameters<ValidationProvider['validateSweepParameters']>[0],
       ) {
-        // Delegate to the real implementation but pretend the bug is present
-        // by rejecting a CLAIMING status first.
         if (account.status === AccountStatus.CLAIMING) {
-          throw new Error('Account cannot be swept. Status: claiming');
+          throw new BadRequestException(
+            'Account cannot be swept. Status: claiming',
+          );
         }
         return realValidate.call(this, request);
       });
@@ -286,9 +288,38 @@ describe('Claim redemption lifecycle (integration) [issue #820]', () => {
     await expect(
       provider.redeemClaim(VALID_TOKEN, VALID_DESTINATION),
     ).rejects.toThrow('Account cannot be swept. Status: claiming');
+  });
 
-    // Contract call never happened, and the account was rolled back.
-    expect(stellarService.executeSweep).not.toHaveBeenCalled();
+  it('propagates SWEEP_CONTRACT_FAILED (502) unchanged from SweepsService through ClaimRedemptionProvider', async () => {
+    // Force SweepsService.executeSweep to throw the distinct 502 contract failure.
+    // The real provider must propagate it verbatim (not transform it) and still
+    // perform rollback from CLAIMING -> PENDING_CLAIM.
+    const { throwSweepContractError, SWEEP_CONTRACT_FAILED } = await import(
+      '../../common/errors/contract-error.mapper.js'
+    );
+    stellarService.executeSweep.mockImplementation(() => {
+      statusSeenByContractCall = account.status;
+      throwSweepContractError();
+    });
+
+    let caught: unknown;
+    try {
+      await provider.redeemClaim(VALID_TOKEN, VALID_DESTINATION);
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeDefined();
+    const httpError = caught as {
+      getStatus: () => number;
+      getResponse: () => unknown;
+    };
+    expect(httpError.getStatus()).toBe(502);
+    const resp = httpError.getResponse() as { errorCode?: string };
+    expect(resp.errorCode).toBe(SWEEP_CONTRACT_FAILED);
+    // Rollback occurred.
     expect(account.status).toBe(AccountStatus.PENDING_CLAIM);
+    expect(stellarService.executeSweep).toHaveBeenCalledTimes(1);
+    expect(transactionProvider.executeSweepTransaction).not.toHaveBeenCalled();
   });
 });

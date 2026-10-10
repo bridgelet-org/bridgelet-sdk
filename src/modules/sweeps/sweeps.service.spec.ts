@@ -345,9 +345,11 @@ describe('SweepsService', () => {
       ).not.toHaveBeenCalled();
     });
 
-    it('maps a submitted-then-rejected execute_sweep transaction to SWEEP_CONTRACT_FAILED', async () => {
+    it('maps a submitted-then-rejected execute_sweep transaction whose error carries a contract marker to SWEEP_CONTRACT_FAILED', async () => {
       stellarService.executeSweep.mockRejectedValue(
-        new Error('execute_sweep failed: {"status":"ERROR"}'),
+        new Error(
+          'execute_sweep failed: {"status":"ERROR","error":"Error(Contract, AlreadySwept)"}',
+        ),
       );
       jest.spyOn(service['logger'], 'error').mockImplementation(() => {});
 
@@ -365,12 +367,14 @@ describe('SweepsService', () => {
       );
     });
 
-    it('does not map transient network/RPC errors — they stay retryable', async () => {
-      const networkError = new Error('fetch failed: ECONNRESET');
-      stellarService.executeSweep.mockRejectedValue(networkError);
+    it('does not map a submit rejection with no contract marker (e.g. sequence) to SWEEP_CONTRACT_FAILED — it stays retryable', async () => {
+      const txBadSeq = new Error(
+        'execute_sweep failed: {"status":"ERROR","error":"tx_bad_seq"}',
+      );
+      stellarService.executeSweep.mockRejectedValue(txBadSeq);
 
       await expect(service.executeSweep(validRequest)).rejects.toThrow(
-        'fetch failed: ECONNRESET',
+        'execute_sweep failed',
       );
     });
 

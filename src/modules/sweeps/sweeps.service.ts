@@ -126,12 +126,19 @@ export class SweepsService {
           signerSecret: sweepExecutionRequest.ephemeralSecret,
         });
       } catch (error) {
-        // A Soroban simulation/contract failure (for example the host rejecting
-        // the invocation with `Error(Auth, InvalidAction)`) is deterministic:
-        // the contract rejects every retry, so surfacing it as a generic 500
-        // only makes the claim page retry uselessly (and trip the throttle).
-        // Map it to a distinct, stable 502 (SWEEP_CONTRACT_FAILED) with a safe
-        // message, and keep the raw host error in the server logs only.
+        // A Soroban contract failure (for example the host rejecting the
+        // invocation with `Error(Auth, InvalidAction)` during simulation) is
+        // deterministic: the contract rejects every retry, so surfacing it as
+        // a generic 500 only makes the claim page retry uselessly (and trip
+        // the throttle). Map it to a distinct, stable 502
+        // (SWEEP_CONTRACT_FAILED) with a safe message, and keep the raw host
+        // error in the server logs only.
+        //
+        // The heuristic matches host/contract markers in the raw error. A
+        // submit rejection whose serialized errorResult carries one of those
+        // markers is also an on-chain contract failure; a pure sequence/fee/
+        // ledger-level refusal (e.g. tx_bad_seq) carries none and stays
+        // retryable below.
         const raw = error instanceof Error ? error.message : String(error);
         if (isSorobanContractFailure(raw)) {
           this.logger.error(
