@@ -124,11 +124,11 @@ const CONTRACT_ERROR_MAP: Record<string, ContractErrorDetails> = {
 };
 
 /**
- * Stable error code returned when a Soroban contract call fails — either during
- * simulation (e.g. the host rejects the invocation with
- * `Error(Auth, InvalidAction)`) or when the network rejects the submitted
- * transaction. Unlike a transient RPC/Horizon error, retrying will not fix it,
- * so it is surfaced distinctly instead of as a generic "try again" 500.
+ * Stable error code returned when a Soroban contract call is refused by the
+ * contract itself — for example the host rejects the invocation with
+ * `Error(Auth, InvalidAction)` during simulation. Unlike a transient RPC/
+ * Horizon error, retrying will not fix it, so it is surfaced distinctly
+ * instead of as a generic "try again" 500.
  */
 export const SWEEP_CONTRACT_FAILED = 'SWEEP_CONTRACT_FAILED';
 
@@ -140,14 +140,24 @@ export const SWEEP_CONTRACT_FAILED_MESSAGE =
   'The sweep was rejected by the on-chain contract. Retrying will not help; please contact support.';
 
 /**
- * Heuristic that recognises a Soroban simulation/contract failure from the raw
+ * Heuristic that recognises a Soroban contract/host failure from the raw
  * error string, as opposed to a transient network or RPC error.
  *
- * - `HostError` / `Error(Auth` / `Error(Contract` / `Error(WasmVm` come from a
- *   failed simulation performed by `prepareTransaction`.
- * - `simulation failed` covers the SDK's own simulation-failure wrapper.
- * - `execute_sweep failed` is the wrapper `StellarService.executeSweep` throws
- *   when the submitted transaction is rejected on the network.
+ * - `HostError` / `Error(Auth` / `Error(Contract` / `Error(WasmVm` are the
+ *   markers the SDK surfaces when the contract refuses a call. For a
+ *   simulation, `Server.prepareTransaction` rethrows `simResponse.error`
+ *   verbatim (e.g. `HostError: Error(Auth, InvalidAction)`), which is exactly
+ *   the deterministic rejection issue #820 wants mapped.
+ * - `simulation failed` covers the SDK's own `AssembledTransaction` wrapper
+ *   ("Transaction simulation failed: ...") used by contract clients.
+ *
+ * Deliberately NOT matched: the `execute_sweep failed: <errorResult>` wrapper
+ * that `StellarService.executeSweep` builds when the network rejects the
+ * *submitted* transaction. That response is either a genuine on-chain contract
+ * failure (its serialized errorResult then carries a marker above and matches
+ * through it) or a sequence/fee/ledger-level refusal such as `tx_bad_seq`
+ * (which carries none and must stay retryable). Blanket-matching that wrapper
+ * would classify bad-sequence/throttling rejections as non-retryable.
  */
 export function isSorobanContractFailure(raw: string): boolean {
   return (
@@ -155,8 +165,7 @@ export function isSorobanContractFailure(raw: string): boolean {
     raw.includes('Error(Auth') ||
     raw.includes('Error(Contract') ||
     raw.includes('Error(WasmVm') ||
-    raw.includes('simulation failed') ||
-    raw.includes('execute_sweep failed')
+    raw.includes('simulation failed')
   );
 }
 
