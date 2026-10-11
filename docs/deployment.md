@@ -119,3 +119,9 @@ using this reasoning instead of a specific benchmark:
 
 When a real load-testing setup is added, replace this section with
 the measured concurrency figure and the `max` value it justifies.
+## Nonce Serialization & Sweep Concurrency (issue #826)
+
+The Soroban SweepController contract increments a single global counter for each successful sweep execution. To prevent concurrent claims from reading the identical nonce and triggering on-chain InvalidAction reverts, the SDK wraps the getSweepNonce -> generateAuthSignature -> executeSweep sequence in a critical-section lock (SweepNonceLock).
+
+- **Lock Scope**: Strictly scoped to the on-chain contract invocation and confirmation; classic Horizon payouts in Step 4 run unlocked to preserve transaction throughput.
+- **Fail-Safe Release**: The lock is bounded by a 30s timeout and always releases in inally blocks on both success and failure states.

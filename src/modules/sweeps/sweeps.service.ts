@@ -1,3 +1,4 @@
+import { defaultSweepNonceLock, SweepNonceLock } from '../../common/locks/sweep-nonce.lock.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ValidationProvider } from './providers/validation.provider.js';
@@ -17,6 +18,8 @@ import {
 
 @Injectable()
 export class SweepsService {
+  private readonly sweepNonceLock: SweepNonceLock = defaultSweepNonceLock;
+
   private readonly logger = new Logger(SweepsService.name);
 
   constructor(
@@ -104,26 +107,31 @@ export class SweepsService {
       const sweepControllerContractId = this.configService.getOrThrow<string>(
         'stellar.contracts.sweepController',
       );
-      const nonce = await this.stellarService.getSweepNonce(
-        sweepControllerContractId,
-      );
 
-      // Step 2: Generate authorization signature for the contract call
-      const authSignature = this.contractProvider.generateAuthSignature({
-        ephemeralPublicKey: sweepExecutionRequest.ephemeralPublicKey,
-        destinationAddress: sweepExecutionRequest.destinationAddress,
-        contractId: ephemeralAccountContractId,
-        nonce,
-      });
-
-      // Step 3: Submit execute_sweep() on the SweepController Soroban contract
+      // #826: serialize read-nonce -> sign -> execute_sweep in cross-instance lock
+      // to ensure concurrent claims never reuse the same global contract nonce counter.
       try {
-        await this.stellarService.executeSweep({
-          sweepControllerContractId,
-          ephemeralAccountContractId,
-          destination: sweepExecutionRequest.destinationAddress,
-          authSignature,
-          signerSecret: sweepExecutionRequest.ephemeralSecret,
+        await this.sweepNonceLock.acquire(sweepControllerContractId, async () => {
+          const nonce = await this.stellarService.getSweepNonce(
+            sweepControllerContractId,
+          );
+
+          // Step 2: Generate authorization signature for the contract call
+          const authSignature = this.contractProvider.generateAuthSignature({
+            ephemeralPublicKey: sweepExecutionRequest.ephemeralPublicKey,
+            destinationAddress: sweepExecutionRequest.destinationAddress,
+            contractId: ephemeralAccountContractId,
+            nonce,
+          });
+
+          // Step 3: Submit execute_sweep() on the SweepController Soroban contract
+          await this.stellarService.executeSweep({
+            sweepControllerContractId,
+            ephemeralAccountContractId,
+            destination: sweepExecutionRequest.destinationAddress,
+            authSignature,
+            signerSecret: sweepExecutionRequest.ephemeralSecret,
+          });
         });
       } catch (error) {
         // A Soroban contract failure (for example the host rejecting the
