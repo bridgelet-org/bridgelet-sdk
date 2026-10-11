@@ -21,7 +21,7 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
 
   for (const key of REQUIRED_VARS) {
     if (!env[key] || env[key]?.trim() === '') {
-      errors.push(`${key} is missing`);
+      errors.push(${key} is missing);
     }
   }
 
@@ -33,10 +33,16 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
     errors.push('ENCRYPTION_KEY must be a 64-character hex string');
   }
 
-  // #811: createEphemeralAccount deploys a contract instance per account from
-  // this hash, so it must be present outside tests. Skipped under
-  // NODE_ENV=test so unit tests can boot without a live network.
+  // Production check: reject wildcard CORS
+  if (env.NODE_ENV === 'production') {
+    if (env.CORS_ORIGINS === '*' || env.CORS_ORIGINS?.trim() === '*') {
+      errors.push('CORS_ORIGINS must not be wildcard (*) in production');
+    }
+  }
+
+  // Non-test environment requirements
   if (env.NODE_ENV !== 'test') {
+    // #811: createEphemeralAccount requires EPHEMERAL_ACCOUNT_WASM_HASH
     const wasmHash = env.EPHEMERAL_ACCOUNT_WASM_HASH;
     if (!wasmHash || wasmHash.trim() === '') {
       errors.push('EPHEMERAL_ACCOUNT_WASM_HASH is missing');
@@ -45,9 +51,18 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
         'EPHEMERAL_ACCOUNT_WASM_HASH must be a 64-character hex string',
       );
     }
-  }
 
-  if (env.NODE_ENV === 'production') {
+    // #824: require SWEEP_CONTROLLER_CONTRACT_ID outside test
+    const sweepController = env.SWEEP_CONTROLLER_CONTRACT_ID;
+    if (!sweepController || sweepController.trim() === '') {
+      errors.push('SWEEP_CONTROLLER_CONTRACT_ID is missing');
+    } else if (!/^C[A-Z0-9]{55}$/.test(sweepController.trim())) {
+      errors.push(
+        'SWEEP_CONTROLLER_CONTRACT_ID must be a valid 56-character Stellar contract ID starting with C',
+      );
+    }
+
+    // #824: require CLAIM_BASE_URL outside test and enforce no trailing slash
     const claimBaseUrl = env.CLAIM_BASE_URL;
     if (!claimBaseUrl || claimBaseUrl.trim() === '') {
       errors.push('CLAIM_BASE_URL is missing');
@@ -70,7 +85,7 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
 
   if (errors.length > 0) {
     throw new Error(
-      `Invalid environment configuration:\n- ${errors.join('\n- ')}`,
+      Invalid environment configuration:\n- ,
     );
   }
 }

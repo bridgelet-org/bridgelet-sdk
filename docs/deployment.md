@@ -119,3 +119,39 @@ using this reasoning instead of a specific benchmark:
 
 When a real load-testing setup is added, replace this section with
 the measured concurrency figure and the `max` value it justifies.
+## Render Deployment Guide (issue #824)
+
+### Service Architecture
+- **Service Type**: Web Service (Node.js runtime)
+- **Build Command**: 
+pm install && npm run build
+- **Start Command**: 
+pm run start:prod
+- **Health Check Path**: GET /health (returns 200 OK once database and Stellar connectivity initialize)
+- **Database**: PostgreSQL (Render Managed Postgres or Supabase external instance)
+
+### Environment Variables Matrix
+
+| Variable | Scope | Description | Required In |
+| :--- | :--- | :--- | :--- |
+| NODE_ENV | Runtime | Use production for live deployments; development for local demos | All |
+| PORT | Networking | Port for the HTTP listener (default 3000; Render sets PORT automatically) | All |
+| CORS_ORIGINS | Security | Comma-separated allowed origins (e.g. https://app.bridgelet.org). **Wildcard * rejected in production.** | Production |
+| CLAIM_BASE_URL | User links | Origin for redemption links without trailing slash (e.g. https://app.bridgelet.org) | Production & Dev |
+| DATABASE_HOST | Database | Postgres host address | All |
+| DATABASE_PORT | Database | Postgres port (typically 5432) | All |
+| DATABASE_NAME | Database | Postgres database name | All |
+| DATABASE_USER | Database | Postgres user credentials | All |
+| DATABASE_PASSWORD | Database | Postgres password credentials | All |
+| STELLAR_NETWORK | Blockchain | 	estnet or mainnet | All |
+| STELLAR_HORIZON_URL | Blockchain | Stellar Horizon endpoint | All |
+| STELLAR_SOROBAN_RPC_URL | Blockchain | Soroban RPC endpoint | All |
+| JWT_SECRET | Auth | Cryptographic secret for verifying client authorization tokens | All |
+| ENCRYPTION_KEY | Security | 64-character hex string for KMS symmetric encryption | All |
+| EPHEMERAL_ACCOUNT_WASM_HASH | Contracts | 64-hex-char hash of uploaded ephemeral account contract | Production & Dev |
+| SWEEP_CONTROLLER_CONTRACT_ID | Contracts | 56-char C... address of deployed SweepController | Production & Dev |
+
+### Testnet Demo vs. Production Environments
+- **Testnet Demo**: Set STELLAR_NETWORK=testnet and provide deployed Testnet contract IDs.
+- **Production Readiness Blocker**: Real-money production deployments require KMS/HSM sweep signer integration (see signer issue [#1](https://github.com/bridgelet-org/bridgelet-sdk/issues/1)).
+- **Contract Redeployment Invariant**: A newly deployed SWEEP_CONTROLLER_CONTRACT_ID or EPHEMERAL_ACCOUNT_WASM_HASH only affects accounts created *after* the deployment. Pre-existing accounts continue binding to their original contract addresses recorded in Postgres.
