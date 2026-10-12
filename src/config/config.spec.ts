@@ -158,6 +158,7 @@ describe('validateEnv - CLAIM_BASE_URL', () => {
     JWT_SECRET: 'test-jwt-secret',
     ENCRYPTION_KEY: 'a'.repeat(64),
     EPHEMERAL_ACCOUNT_WASM_HASH: 'b'.repeat(64),
+    SWEEP_CONTROLLER_CONTRACT_ID: 'C'.repeat(56),
   };
 
   it('refuses to start when NODE_ENV=production and CLAIM_BASE_URL is missing', async () => {
@@ -199,24 +200,31 @@ describe('validateEnv - CLAIM_BASE_URL', () => {
         ...baseValidEnv,
         NODE_ENV: 'production',
         CLAIM_BASE_URL: 'https://claim.bridgelet.io',
+        CORS_ORIGINS: 'https://app.bridgelet.io',
       }),
     ).not.toThrow();
   });
 
-  it('starts normally without CLAIM_BASE_URL when NODE_ENV is development or test', async () => {
+  it('starts normally without CLAIM_BASE_URL when NODE_ENV=test (#824)', async () => {
     const { validateEnv } = await import('./env-validation.js');
-    expect(() =>
-      validateEnv({
-        ...baseValidEnv,
-        NODE_ENV: 'development',
-      }),
-    ).not.toThrow();
-
     expect(() =>
       validateEnv({
         ...baseValidEnv,
         NODE_ENV: 'test',
       }),
     ).not.toThrow();
+  });
+
+  it('refuses to start without CLAIM_BASE_URL outside tests (#824)', async () => {
+    const { validateEnv } = await import('./env-validation.js');
+    for (const NODE_ENV of ['development', 'production']) {
+      expect(() =>
+        validateEnv({
+          ...baseValidEnv,
+          NODE_ENV,
+          CORS_ORIGINS: 'https://app.example.com',
+        }),
+      ).toThrow('CLAIM_BASE_URL is missing');
+    }
   });
 });

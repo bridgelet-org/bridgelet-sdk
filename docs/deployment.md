@@ -119,3 +119,89 @@ using this reasoning instead of a specific benchmark:
 
 When a real load-testing setup is added, replace this section with
 the measured concurrency figure and the `max` value it justifies.
+
+## Deploying on Render (issue #824)
+
+A fresh clone should reach a working testnet deployment from this section
+alone. `validateEnv()` in `src/config/env-validation.ts` runs before the Nest
+app is created, so every mistake below stops the process at boot with the
+variable named instead of surfacing later as a wrong claim link or a blocked
+browser.
+
+### 1. Service type and commands
+
+- **Type:** Web Service (Node runtime). The repo's `docker-compose.yml` pins
+  `node:22-bookworm-slim` and `postgres:16-alpine`; Render's Node 22 image
+  matches that.
+- **Build command:** `npm ci && npm run build`
+- **Start command:** `npm run start:prod` (`node dist/main.js`)
+- **Health check path:** `/health` — `HealthController` answers 200 with
+  `{"status":"ok",...}` after a `SELECT 1`, and 503 `degraded` once the pool is
+  exhausted (issue #516). Render restarts an instance that fails this check.
+- **Port:** read from `PORT`; set it to Render's value (defaults to `3000`).
+
+### 2. Postgres
+
+- Add a Render Postgres 16 instance and copy its values into
+  `DATABASE_HOST`, `DATABASE_PORT`, `DATABASE_NAME`, `DATABASE_USER`,
+  `DATABASE_PASSWORD`.
+- `DATABASE_SYNC` stays `false`. `isSynchronizeAllowed()` throws outside
+  `NODE_ENV=test`, so a deployed instance that tries to sync dies at boot
+  instead of silently altering the schema. Apply schema changes with
+  `npm run migration:run` as a one-off job.
+- Size the pool per instance: `max: 10` is per NestJS process, so N instances
+  open up to `N * 10` connections (see the pool section above).
+
+### 3. Which `NODE_ENV` to use
+
+- **`production`** — anything reachable from the internet, *including a public
+  testnet demo*. This is the mode where a wildcard `CORS_ORIGINS` and a missing
+  `CLAIM_BASE_URL` are refused at startup.
+- **`development`** — your machine only. Still requires `CLAIM_BASE_URL` (point
+  it at the local port) since #824.
+- **`test`** — jest only. Several required variables are tolerated there, so
+  never deploy with it.
+- `NODE_ENV=production` is not the same statement as "mainnet": mainnet sweeps
+  are still blocked on a production-capable signer (issue #823), while a
+  testnet demo running in `production` mode is supported.
+
+### 4. Environment variables
+
+| Variable | Required | Notes |
+| --- | --- | --- |
+| `NODE_ENV` | yes | `production` on Render (see above). |
+| `DATABASE_HOST` / `DATABASE_PORT` / `DATABASE_NAME` / `DATABASE_USER` / `DATABASE_PASSWORD` | yes | From the Render Postgres instance. |
+| `STELLAR_NETWORK` | yes | `testnet` or `mainnet`. |
+| `STELLAR_HORIZON_URL` / `STELLAR_SOROBAN_RPC_URL` | yes | Match the network. |
+| `JWT_SECRET` | yes | Generate per environment; rotate with `docs/jwt-secret-rotation-runbook.md`. |
+| `ENCRYPTION_KEY` | yes | 64 hex chars. Fallback key when KMS is off. |
+| `EPHEMERAL_ACCOUNT_WASM_HASH` | yes (outside tests) | 64 hex chars, from `bridgelet-core/deployments/testnet.json`. |
+| `SWEEP_CONTROLLER_CONTRACT_ID` | yes (outside tests) | Controller that authorizes sweeps. |
+| `CLAIM_BASE_URL` | yes (outside tests) | Public URL of this service, no trailing slash. |
+| `CORS_ORIGINS` | yes in production | Explicit origin list; `*` is refused. |
+| `PORT` | recommended | Render sets it; the app defaults to 3000. |
+| `KMS_ENABLED` / `KMS_KEY_ID` / `AWS_REGION` | recommended | Envelope encryption instead of the fallback key. |
+| `KMS_DATA_KEY_PATH` / `KMS_ENCRYPTED_DATA_KEY` | recommended | Without either, the wrapped data key is regenerated on restart and existing secrets stop decrypting. |
+| `FUNDING_ACCOUNT_SECRET` | yes in practice | Pays for account deploys; size it (each account = one extra deploy transaction). |
+| `RECOVERY_ACCOUNT_PUBLIC` | yes in practice | Recovery target for sweeps. |
+| `SWEEP_SIGNING_KEY_SEED` | yes in practice | Testnet/demo signer seed; the production signer is issue #823. |
+| `DATABASE_SYNC` | no | Must stay `false` outside tests. |
+| `DATABASE_LOGGING`, `LOG_LEVEL`, `API_RATE_LIMIT`, `PAYMENT_POLL_INTERVAL_MS`, `WEBHOOK_*`, `*_INTERVAL_MS` | optional | Tuning only; defaults are fine for a first deploy. |
+
+Server-only by convention: `JWT_SECRET`, `ENCRYPTION_KEY`,
+`FUNDING_ACCOUNT_SECRET`, `SWEEP_SIGNING_KEY_SEED`, `DATABASE_PASSWORD` — never
+expose them to the frontend, in a build-time variable, or in a public log.
+
+### 5. Deploy checklist
+
+1. Postgres created, `DATABASE_*` exported, `DATABASE_SYNC=false`.
+2. `EPHEMERAL_ACCOUNT_WASM_HASH` and `SWEEP_CONTROLLER_CONTRACT_ID` taken from
+   `bridgelet-core/deployments/<network>.json`.
+3. `CLAIM_BASE_URL` = the service's own public URL, no trailing slash.
+4. `CORS_ORIGINS` = the frontend origin(s), never `*`.
+5. `npm run migration:run` executed once against the new database.
+6. `GET /health` returns 200 before the service takes traffic.
+7. Redeploying the SweepController produces a new contract ID and a new
+   `SWEEP_CONTROLLER_CONTRACT_ID`: each ephemeral account stores the controller
+   in effect when it was created, so a redeploy only affects **new** accounts —
+   accounts already created keep sweeping through the old controller.
