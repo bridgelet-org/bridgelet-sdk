@@ -158,6 +158,12 @@ describe('validateEnv - CLAIM_BASE_URL', () => {
     JWT_SECRET: 'test-jwt-secret',
     ENCRYPTION_KEY: 'a'.repeat(64),
     EPHEMERAL_ACCOUNT_WASM_HASH: 'b'.repeat(64),
+    SWEEP_CONTROLLER_CONTRACT_ID: `C${'A'.repeat(55)}`,
+  };
+
+  const deployableEnv: NodeJS.ProcessEnv = {
+    ...baseValidEnv,
+    CLAIM_BASE_URL: 'http://localhost:3000',
   };
 
   it('refuses to start when NODE_ENV=production and CLAIM_BASE_URL is missing', async () => {
@@ -196,26 +202,167 @@ describe('validateEnv - CLAIM_BASE_URL', () => {
     const { validateEnv } = await import('./env-validation.js');
     expect(() =>
       validateEnv({
-        ...baseValidEnv,
+        ...deployableEnv,
         NODE_ENV: 'production',
         CLAIM_BASE_URL: 'https://claim.bridgelet.io',
+        CORS_ORIGINS: 'https://app.bridgelet.io',
       }),
     ).not.toThrow();
   });
 
-  it('starts normally without CLAIM_BASE_URL when NODE_ENV is development or test', async () => {
+  // #824: the development fallback (https://claim.bridgelet.io) built claim
+  // links pointing at the wrong host, so the variable is required outside
+  // NODE_ENV=test rather than only in production.
+  it('refuses to start without CLAIM_BASE_URL when NODE_ENV=development', async () => {
     const { validateEnv } = await import('./env-validation.js');
     expect(() =>
       validateEnv({
         ...baseValidEnv,
         NODE_ENV: 'development',
       }),
-    ).not.toThrow();
+    ).toThrow('CLAIM_BASE_URL is missing');
+  });
 
+  it('starts normally without CLAIM_BASE_URL when NODE_ENV is test', async () => {
+    const { validateEnv } = await import('./env-validation.js');
     expect(() =>
       validateEnv({
         ...baseValidEnv,
         NODE_ENV: 'test',
+      }),
+    ).not.toThrow();
+  });
+
+  it('accepts a complete non-test configuration', async () => {
+    const { validateEnv } = await import('./env-validation.js');
+    expect(() =>
+      validateEnv({
+        ...deployableEnv,
+        NODE_ENV: 'development',
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe('validateEnv - SWEEP_CONTROLLER_CONTRACT_ID', () => {
+  const baseValidEnv: NodeJS.ProcessEnv = {
+    DATABASE_HOST: 'localhost',
+    DATABASE_PORT: '5432',
+    DATABASE_NAME: 'bridgelet',
+    DATABASE_USER: 'postgres',
+    DATABASE_PASSWORD: 'password',
+    STELLAR_NETWORK: 'testnet',
+    STELLAR_HORIZON_URL: 'https://horizon-testnet.stellar.org',
+    STELLAR_SOROBAN_RPC_URL: 'https://soroban-testnet.stellar.org',
+    JWT_SECRET: 'test-jwt-secret',
+    ENCRYPTION_KEY: 'a'.repeat(64),
+    EPHEMERAL_ACCOUNT_WASM_HASH: 'b'.repeat(64),
+    CLAIM_BASE_URL: 'http://localhost:3000',
+  };
+
+  it('refuses to start when SWEEP_CONTROLLER_CONTRACT_ID is missing outside test', async () => {
+    const { validateEnv } = await import('./env-validation.js');
+    expect(() =>
+      validateEnv({
+        ...baseValidEnv,
+        NODE_ENV: 'development',
+      }),
+    ).toThrow('SWEEP_CONTROLLER_CONTRACT_ID is missing');
+  });
+
+  it('refuses to start when SWEEP_CONTROLLER_CONTRACT_ID is blank', async () => {
+    const { validateEnv } = await import('./env-validation.js');
+    expect(() =>
+      validateEnv({
+        ...baseValidEnv,
+        NODE_ENV: 'production',
+        SWEEP_CONTROLLER_CONTRACT_ID: '   ',
+        CORS_ORIGINS: 'https://app.bridgelet.io',
+      }),
+    ).toThrow('SWEEP_CONTROLLER_CONTRACT_ID is missing');
+  });
+
+  it('starts without SWEEP_CONTROLLER_CONTRACT_ID when NODE_ENV is test', async () => {
+    const { validateEnv } = await import('./env-validation.js');
+    expect(() =>
+      validateEnv({
+        ...baseValidEnv,
+        NODE_ENV: 'test',
+      }),
+    ).not.toThrow();
+  });
+
+  it('accepts a contract id when it is set', async () => {
+    const { validateEnv } = await import('./env-validation.js');
+    expect(() =>
+      validateEnv({
+        ...baseValidEnv,
+        NODE_ENV: 'development',
+        SWEEP_CONTROLLER_CONTRACT_ID: `C${'B'.repeat(55)}`,
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe('validateEnv - CORS_ORIGINS in production', () => {
+  const deployableEnv: NodeJS.ProcessEnv = {
+    NODE_ENV: 'production',
+    DATABASE_HOST: 'localhost',
+    DATABASE_PORT: '5432',
+    DATABASE_NAME: 'bridgelet',
+    DATABASE_USER: 'postgres',
+    DATABASE_PASSWORD: 'password',
+    STELLAR_NETWORK: 'testnet',
+    STELLAR_HORIZON_URL: 'https://horizon-testnet.stellar.org',
+    STELLAR_SOROBAN_RPC_URL: 'https://soroban-testnet.stellar.org',
+    JWT_SECRET: 'test-jwt-secret',
+    ENCRYPTION_KEY: 'a'.repeat(64),
+    EPHEMERAL_ACCOUNT_WASM_HASH: 'b'.repeat(64),
+    SWEEP_CONTROLLER_CONTRACT_ID: `C${'A'.repeat(55)}`,
+    CLAIM_BASE_URL: 'https://claim.bridgelet.io',
+  };
+
+  it('refuses to start when CORS_ORIGINS is "*" in production', async () => {
+    const { validateEnv } = await import('./env-validation.js');
+    expect(() => validateEnv({ ...deployableEnv, CORS_ORIGINS: '*' })).toThrow(
+      'CORS_ORIGINS must list explicit origins in production',
+    );
+  });
+
+  it('refuses to start when CORS_ORIGINS is unset in production', async () => {
+    const { validateEnv } = await import('./env-validation.js');
+    expect(() => validateEnv({ ...deployableEnv })).toThrow(
+      'CORS_ORIGINS must list explicit origins in production',
+    );
+  });
+
+  it('refuses to start when "*" hides among explicit origins', async () => {
+    const { validateEnv } = await import('./env-validation.js');
+    expect(() =>
+      validateEnv({
+        ...deployableEnv,
+        CORS_ORIGINS: 'https://app.bridgelet.io,*',
+      }),
+    ).toThrow('CORS_ORIGINS must list explicit origins in production');
+  });
+
+  it('starts when CORS_ORIGINS lists explicit origins', async () => {
+    const { validateEnv } = await import('./env-validation.js');
+    expect(() =>
+      validateEnv({
+        ...deployableEnv,
+        CORS_ORIGINS: 'https://app.bridgelet.io,https://admin.bridgelet.io',
+      }),
+    ).not.toThrow();
+  });
+
+  it('still allows "*" outside production', async () => {
+    const { validateEnv } = await import('./env-validation.js');
+    expect(() =>
+      validateEnv({
+        ...deployableEnv,
+        NODE_ENV: 'development',
+        CORS_ORIGINS: '*',
       }),
     ).not.toThrow();
   });

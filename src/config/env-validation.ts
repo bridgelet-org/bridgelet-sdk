@@ -36,6 +36,13 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
   // #811: createEphemeralAccount deploys a contract instance per account from
   // this hash, so it must be present outside tests. Skipped under
   // NODE_ENV=test so unit tests can boot without a live network.
+  //
+  // #824: the same non-test gate now also covers the sweep controller id and
+  // the claim base URL. Both used to fail late and confusingly: a missing
+  // controller id only surfaced when the first sweep was rejected on chain,
+  // and a missing claim base URL silently fell back to
+  // https://claim.bridgelet.io, which produced claim links pointing at the
+  // wrong host when running locally.
   if (env.NODE_ENV !== 'test') {
     const wasmHash = env.EPHEMERAL_ACCOUNT_WASM_HASH;
     if (!wasmHash || wasmHash.trim() === '') {
@@ -45,9 +52,12 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
         'EPHEMERAL_ACCOUNT_WASM_HASH must be a 64-character hex string',
       );
     }
-  }
 
-  if (env.NODE_ENV === 'production') {
+    const controllerId = env.SWEEP_CONTROLLER_CONTRACT_ID;
+    if (!controllerId || controllerId.trim() === '') {
+      errors.push('SWEEP_CONTROLLER_CONTRACT_ID is missing');
+    }
+
     const claimBaseUrl = env.CLAIM_BASE_URL;
     if (!claimBaseUrl || claimBaseUrl.trim() === '') {
       errors.push('CLAIM_BASE_URL is missing');
@@ -65,6 +75,22 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
           errors.push('CLAIM_BASE_URL must be a valid http or https URL');
         }
       }
+    }
+  }
+
+  // #824: app.config.ts reads `CORS_ORIGINS?.split(',') || '*'`, so an unset
+  // variable is indistinguishable from an explicit '*' — both let any origin
+  // call the API. Production has to name its origins.
+  if (env.NODE_ENV === 'production') {
+    const origins = (env.CORS_ORIGINS ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter((origin) => origin !== '');
+
+    if (origins.length === 0 || origins.includes('*')) {
+      errors.push(
+        'CORS_ORIGINS must list explicit origins in production; "*" (or unset) is not allowed',
+      );
     }
   }
 
