@@ -266,12 +266,12 @@ describe('ClaimRedemptionProvider', () => {
     });
   });
 
-  // Issue #641 (re-verified against #702): sweep.completed/sweep.failed must
-  // each fire exactly once, and never both, for a single redemption. The two
-  // triggers sit in mutually-exclusive branches (success vs. catch), and the
-  // isPartial branch returns before either can run, so at most one of
-  // sweep.completed/sweep.failed/sweep.partial fires per redemption attempt.
-  describe('redeemClaim - webhook exactly-once guarantees (issue #641)', () => {
+  // Issues #641, #927 (re-verified against #702): sweep.completed and
+  // sweep.failed must each fire exactly once for its corresponding sweep
+  // outcome, and never both for a single redemption. The two triggers sit
+  // in mutually-exclusive branches (success vs. catch), while the isPartial
+  // branch returns early and pre-sweep checks reject before either can run.
+  describe('redeemClaim - webhook exactly-once guarantees (issues #641, #927)', () => {
     it('fires sweep.completed exactly once and never sweep.failed on success', async () => {
       await provider.redeemClaim(VALID_TOKEN, VALID_DESTINATION);
 
@@ -283,6 +283,18 @@ describe('ClaimRedemptionProvider', () => {
       );
       expect(completedCalls).toHaveLength(1);
       expect(failedCalls).toHaveLength(0);
+      expect(mockWebhooksService.triggerEvent).toHaveBeenCalledTimes(1);
+      expect(mockWebhooksService.triggerEvent).toHaveBeenCalledWith(
+        'sweep.completed',
+        expect.objectContaining({
+          accountId: mockAccount.id,
+          amount: mockAccount.amount,
+          asset: mockAccount.asset,
+          destination: VALID_DESTINATION,
+          txHash: mockSweepResult.txHash,
+          metadata: mockAccount.metadata,
+        }),
+      );
     });
 
     it('fires sweep.failed exactly once and never sweep.completed when the sweep throws', async () => {
@@ -302,6 +314,220 @@ describe('ClaimRedemptionProvider', () => {
       );
       expect(failedCalls).toHaveLength(1);
       expect(completedCalls).toHaveLength(0);
+      expect(mockWebhooksService.triggerEvent).toHaveBeenCalledTimes(1);
+      expect(mockWebhooksService.triggerEvent).toHaveBeenCalledWith(
+        'sweep.failed',
+        expect.objectContaining({
+          accountId: mockAccount.id,
+          amount: mockAccount.amount,
+          asset: mockAccount.asset,
+          destination: VALID_DESTINATION,
+          error: 'boom',
+          timestamp: expect.any(Date),
+        }),
+      );
+    });
+
+    it('fires sweep.failed exactly once and never sweep.completed if claim recording fails after sweep', async () => {
+      // SweepsService succeeds, but the second DB transaction (recording Claim and setting CLAIMED) fails
+      const claimingAccount = {
+        ...mockAccount,
+        status: AccountStatus.CLAIMING,
+      };
+      const mgr1 = makeManager({ ...mockAccount });
+      const mgr2 = makeManager(null);
+
+      const ds = {
+        transaction: jest
+          .fn()
+          .mockImplementationOnce(
+            async (cb: (m: unknown) => Promise<unknown>) => {
+              mgr1.save.mockResolvedValue(claimingAccount);
+              return cb(mgr1);
+            },
+          )
+          .mockImplementationOnce(
+            async (cb: (m: unknown) => Promise<unknown>) => {
+              mgr2.save.mockRejectedValue(new Error('database write failure'));
+              return cb(mgr2);
+            },
+          ),
+        _mgr1: mgr1,
+      };
+
+      const p = await buildModule(ds);
+
+      await expect(
+        p.redeemClaim(VALID_TOKEN, VALID_DESTINATION),
+      ).rejects.toThrow('database write failure');
+
+      const completedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.completed',
+      );
+      const failedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.failed',
+      );
+      expect(failedCalls).toHaveLength(1);
+      expect(completedCalls).toHaveLength(0);
+      expect(mockWebhooksService.triggerEvent).toHaveBeenCalledTimes(1);
+      expect(mockWebhooksService.triggerEvent).toHaveBeenCalledWith(
+        'sweep.failed',
+        expect.objectContaining({
+          accountId: mockAccount.id,
+          error: 'database write failure',
+        }),
+      );
+    });
+
+    it('fires sweep.completed exactly once and never sweep.failed when retrying a PARTIAL_SWEEP account successfully', async () => {
+      const partialAccount = {
+        ...mockAccount,
+        status: AccountStatus.PARTIAL_SWEEP,
+      };
+      const claimingAccount = {
+        ...partialAccount,
+        status: AccountStatus.CLAIMING,
+      };
+      const mgr1 = makeManager(partialAccount);
+      const mgr2 = makeManager(null);
+
+      const ds = {
+        transaction: jest
+          .fn()
+          .mockImplementationOnce(
+            async (cb: (m: unknown) => Promise<unknown>) => {
+              mgr1.save.mockResolvedValue(claimingAccount);
+              return cb(mgr1);
+            },
+          )
+          .mockImplementationOnce(
+            async (cb: (m: unknown) => Promise<unknown>) => {
+              mgr2.save
+                .mockResolvedValueOnce(undefined)
+                .mockResolvedValueOnce({ ...mockClaim });
+              mgr2.create.mockReturnValue({ ...mockClaim });
+              return cb(mgr2);
+            },
+          ),
+      };
+
+      const p = await buildModule(ds);
+      mockSweepsService.executeSweep.mockResolvedValueOnce(mockSweepResult);
+
+      const result = await p.redeemClaim(VALID_TOKEN, VALID_DESTINATION);
+
+      expect(result.success).toBe(true);
+      const completedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.completed',
+      );
+      const failedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.failed',
+      );
+      expect(completedCalls).toHaveLength(1);
+      expect(failedCalls).toHaveLength(0);
+      expect(mockWebhooksService.triggerEvent).toHaveBeenCalledTimes(1);
+    });
+
+    it('fires sweep.failed exactly once and never sweep.completed when retrying a PARTIAL_SWEEP account fails', async () => {
+      const partialAccount = {
+        ...mockAccount,
+        status: AccountStatus.PARTIAL_SWEEP,
+      };
+      const claimingAccount = {
+        ...partialAccount,
+        status: AccountStatus.CLAIMING,
+      };
+      const mgr1 = makeManager(partialAccount);
+
+      const ds = {
+        transaction: jest
+          .fn()
+          .mockImplementationOnce(
+            async (cb: (m: unknown) => Promise<unknown>) => {
+              mgr1.save.mockResolvedValue(claimingAccount);
+              return cb(mgr1);
+            },
+          ),
+      };
+
+      const p = await buildModule(ds);
+      mockSweepsService.executeSweep.mockRejectedValueOnce(
+        new Error('Payment submission timeout'),
+      );
+
+      await expect(
+        p.redeemClaim(VALID_TOKEN, VALID_DESTINATION),
+      ).rejects.toThrow('Payment submission timeout');
+
+      const completedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.completed',
+      );
+      const failedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.failed',
+      );
+      expect(failedCalls).toHaveLength(1);
+      expect(completedCalls).toHaveLength(0);
+      expect(mockWebhooksService.triggerEvent).toHaveBeenCalledTimes(1);
+      expect(mockWebhooksService.triggerEvent).toHaveBeenCalledWith(
+        'sweep.failed',
+        expect.objectContaining({
+          accountId: mockAccount.id,
+          error: 'Payment submission timeout',
+        }),
+      );
+    });
+
+    it('never fires either sweep.completed or sweep.failed when redemption fails validation pre-sweep', async () => {
+      jest
+        .spyOn(ValidationProvider, 'assertDestinationExists')
+        .mockRejectedValueOnce(
+          new BadRequestException('Destination account not found'),
+        );
+
+      await expect(
+        provider.redeemClaim(VALID_TOKEN, VALID_DESTINATION),
+      ).rejects.toThrow(BadRequestException);
+
+      const completedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.completed',
+      );
+      const failedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.failed',
+      );
+      expect(completedCalls).toHaveLength(0);
+      expect(failedCalls).toHaveLength(0);
+      expect(mockWebhooksService.triggerEvent).not.toHaveBeenCalled();
+    });
+
+    it('never fires both sweep.completed and sweep.failed for any single redemption (mutual exclusivity)', async () => {
+      // Success path
+      await provider.redeemClaim(VALID_TOKEN, VALID_DESTINATION);
+      let completedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.completed',
+      );
+      let failedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.failed',
+      );
+      expect(completedCalls.length > 0 && failedCalls.length > 0).toBe(false);
+
+      // Failure path
+      jest.clearAllMocks();
+      const ds = makeHappyPathDataSource();
+      const p = await buildModule(ds);
+      mockSweepsService.executeSweep.mockRejectedValueOnce(
+        new Error('Stellar error'),
+      );
+      await expect(
+        p.redeemClaim(VALID_TOKEN, VALID_DESTINATION),
+      ).rejects.toThrow();
+
+      completedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.completed',
+      );
+      failedCalls = mockWebhooksService.triggerEvent.mock.calls.filter(
+        ([event]) => event === 'sweep.failed',
+      );
+      expect(completedCalls.length > 0 && failedCalls.length > 0).toBe(false);
     });
   });
 

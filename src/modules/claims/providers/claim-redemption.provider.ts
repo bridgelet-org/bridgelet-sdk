@@ -295,6 +295,9 @@ export class ClaimRedemptionProvider {
         outcome: 'success',
       });
 
+      // Webhook trigger for sweep.completed (verified for #927, re-confirmed
+      // #641/#702: fires exactly once per successful redemption, mutually
+      // exclusive with sweep.failed).
       await this.webhooksService.triggerEvent('sweep.completed', {
         accountId: account.id,
         amount: account.amount,
@@ -356,6 +359,9 @@ export class ClaimRedemptionProvider {
         failureReason: typedError.message,
       });
 
+      // Webhook trigger for sweep.failed (verified for #927, re-confirmed
+      // #641/#702: fires exactly once on redemption failure, mutually
+      // exclusive with sweep.completed).
       await this.webhooksService.triggerEvent('sweep.failed', {
         accountId: account.id,
         amount: account.amount,
