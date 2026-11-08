@@ -5,8 +5,22 @@ import * as StellarSdk from '@stellar/stellar-sdk';
 import { rpc as SorobanRpc } from '@stellar/stellar-sdk';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Histogram } from 'prom-client';
+import {
+  isNativeAsset,
+  parseAsset,
+} from '../../common/utils/stellar-asset.util.js';
 
 export const EXPIRY_BUFFER_LEDGERS = 10;
+
+/**
+ * Starting balance for a new ephemeral account (in XLM).
+ *
+ * #991 reserve maths: an account needs `(2 + subentries) * base_reserve`.
+ * The network base reserve is 0.5 XLM, so a new account is 1.0 XLM and a
+ * trustline (one subentry) raises the minimum to 1.5 XLM. 2 XLM therefore
+ * covers base reserve + one trustline + changeTrust/submit fees.
+ */
+export const EPHEMERAL_STARTING_BALANCE = '2';
 
 @Injectable()
 export class StellarService {
@@ -134,6 +148,8 @@ export class StellarService {
     recoveryAddress: string;
     sweepControllerContractId: string;
     fundingKeypairSecret?: string;
+    /** #991: secret of the ephemeral account, used to sign its trustline. */
+    ephemeralSecret?: string;
   }): Promise<{ txHash: string; contractId: string }> {
     this.logger.log(`Creating ephemeral account: ${params.publicKey}`);
 
@@ -154,7 +170,7 @@ export class StellarService {
       .addOperation(
         StellarSdk.Operation.createAccount({
           destination: params.publicKey,
-          startingBalance: '2',
+          startingBalance: EPHEMERAL_STARTING_BALANCE,
         }),
       )
       .setTimeout(30)
@@ -163,6 +179,23 @@ export class StellarService {
     transaction.sign(fundingKeypair);
     const result = await this.server.submitTransaction(transaction);
     this.logger.log(`Horizon account created: ${result.hash}`);
+
+    // Step 1b (#991): an issued asset can only be received once the temporary
+    // account trusts the issuer. Establish that trustline with the ephemeral
+    // key before the account is reported ready for payment. Native XLM needs
+    // no trustline.
+    if (!isNativeAsset(params.asset)) {
+      if (!params.ephemeralSecret) {
+        throw new Error(
+          `Cannot establish a trustline for ${params.asset}: the ephemeral ` +
+            'account secret is required.',
+        );
+      }
+      await this.createTrustline({
+        secret: params.ephemeralSecret,
+        asset: params.asset,
+      });
+    }
 
     // Step 2: Deploy a dedicated contract instance for this account (#811).
     // The shared `stellar.contracts.ephemeralAccount` ID is deliberately not
@@ -225,6 +258,83 @@ export class StellarService {
       `Contract ${contractId} initialized for ${params.publicKey}, expiry ledger: ${expiryLedger}`,
     );
     return { txHash: result.hash, contractId };
+  }
+
+  /**
+   * Submits a `changeTrust` operation for an issued asset, signed by the
+   * ephemeral account itself (#991).
+   *
+   * A classic Stellar account cannot hold or receive a non-native asset until
+   * it trusts that asset's issuer. Without this step the sender's USDC payment
+   * fails. The operation is submitted after `createAccount` has funded the
+   * account and before it is marked ready for payment; a failure is surfaced
+   * to the caller so the account is marked `FAILED`.
+   *
+   * @returns the Horizon transaction hash of the changeTrust submission.
+   */
+  async createTrustline(params: {
+    secret: string;
+    asset: string;
+  }): Promise<string> {
+    const ephemeralKeypair = StellarSdk.Keypair.fromSecret(params.secret);
+    const parsed = parseAsset(params.asset);
+
+    if (parsed.isNative) {
+      throw new Error('Native XLM does not require a trustline.');
+    }
+    if (!parsed.code || !parsed.issuer) {
+      throw new Error(
+        `Cannot establish a trustline for invalid asset ${params.asset}.`,
+      );
+    }
+
+    const asset = new StellarSdk.Asset(parsed.code, parsed.issuer);
+    // The account was only just created; Horizon may still be ingesting the
+    // ledger that contains it. Retry a 404 briefly before giving up so the
+    // trustline is not lost to a transient "account not found".
+    const account = await this.loadAccountWithRetry(
+      ephemeralKeypair.publicKey(),
+    );
+
+    const transaction = new StellarSdk.TransactionBuilder(account, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase: this.getNetworkPassphrase(),
+    })
+      .addOperation(StellarSdk.Operation.changeTrust({ asset }))
+      .setTimeout(30)
+      .build();
+
+    transaction.sign(ephemeralKeypair);
+    const result = await this.server.submitTransaction(transaction);
+    this.logger.log(
+      `Trustline established for ${params.asset} on ${ephemeralKeypair.publicKey()}: ${result.hash}`,
+    );
+    return result.hash;
+  }
+
+  private async loadAccountWithRetry(
+    publicKey: string,
+    maxAttempts = 4,
+  ): Promise<StellarSdk.Horizon.AccountResponse> {
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      try {
+        return await this.server.loadAccount(publicKey);
+      } catch (error: unknown) {
+        lastError = error;
+        const isNotFound =
+          error instanceof StellarSdk.NotFoundError ||
+          (error as { response?: { status?: number } })?.response?.status ===
+            404;
+        if (!isNotFound || attempt === maxAttempts - 1) throw error;
+        await new Promise((resolve) =>
+          setTimeout(resolve, 250 * (attempt + 1)),
+        );
+      }
+    }
+
+    throw lastError;
   }
 
   /**

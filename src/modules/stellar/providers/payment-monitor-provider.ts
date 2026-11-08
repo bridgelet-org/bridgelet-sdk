@@ -7,6 +7,10 @@ import { StellarService } from '../stellar.service.js';
 import { Account } from '../../../modules/accounts/entities/account.entity.js';
 import { AccountStatus } from '../../accounts/enums/account-status.enum.js';
 import { assertValidAccountStatusTransition } from '../../accounts/enums/account-status-transition.util.js';
+import {
+  parseAmountToStroops,
+  paymentMatchesAsset,
+} from '../../../common/utils/stellar-asset.util.js';
 
 /**
  * PaymentMonitorProvider - Horizon SSE-based payment detection
@@ -185,6 +189,30 @@ export class PaymentMonitorProvider implements OnModuleDestroy {
     // Only handle inbound payments to this account's address
     if (record.to !== account.publicKey) return;
 
+    // #991: only the exact expected asset (code + issuer) and amount counts as
+    // funding. The stream is opened for the account, so without this a payment
+    // of a look-alike asset from a different issuer, or a partial payment,
+    // would be recorded on the contract as if the account had been funded.
+    if (!paymentMatchesAsset(account.asset, record)) {
+      this.logger.debug(
+        `Ignoring payment for account ${account.id}: asset ` +
+          `${record.asset_code ?? 'XLM'}:${record.asset_issuer ?? 'native'} ` +
+          `does not match ${account.asset}`,
+      );
+      return;
+    }
+
+    if (
+      parseAmountToStroops(record.amount) !==
+      parseAmountToStroops(account.amount)
+    ) {
+      this.logger.debug(
+        `Ignoring payment for account ${account.id}: amount ${record.amount} ` +
+          `does not match expected ${account.amount}`,
+      );
+      return;
+    }
+
     this.logger.log(
       `Inbound payment detected for account ${account.id}: ` +
         `${record.amount} ${record.asset_code ?? 'XLM'} from ${record.from}`,
@@ -215,7 +243,7 @@ export class PaymentMonitorProvider implements OnModuleDestroy {
 
     // Convert the decimal amount string from Horizon to i128 bigint (stroops).
     // Stellar amounts have 7 decimal places: 1 XLM = 10_000_000 stroops.
-    const amountBigint = this.parseAmountToStroops(record.amount);
+    const amountBigint = parseAmountToStroops(record.amount);
 
     try {
       await this.stellarService.recordPayment({
@@ -355,18 +383,5 @@ export class PaymentMonitorProvider implements OnModuleDestroy {
         : StellarSdk.Networks.TESTNET;
 
     return asset.contractId(networkPassphrase);
-  }
-
-  /**
-   * Converts a Horizon decimal amount string (e.g. "100.5000000") to stroops
-   * as a bigint for the i128 contract parameter.
-   * 1 unit = 10_000_000 stroops (7 decimal places).
-   */
-  private parseAmountToStroops(amount: string): bigint {
-    // Split on decimal point
-    const [whole, fraction = ''] = amount.split('.');
-    // Pad or truncate fraction to exactly 7 digits
-    const paddedFraction = fraction.padEnd(7, '0').slice(0, 7);
-    return BigInt(whole) * 10_000_000n + BigInt(paddedFraction);
   }
 }

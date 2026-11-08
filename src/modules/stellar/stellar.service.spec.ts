@@ -313,6 +313,64 @@ describe('StellarService', () => {
       expect(horizonServer.submitTransaction).toHaveBeenCalledTimes(1);
     });
 
+    // #991: issued assets need a trustline before the account can be funded.
+    it('submits a changeTrust for issued assets using the ephemeral secret', async () => {
+      setupHappyPath();
+      const ephemeral = StellarSdk.Keypair.random();
+      const asset = `USDC:${FUNDING_KEYPAIR.publicKey()}`;
+
+      await service.createEphemeralAccount({
+        ...params,
+        publicKey: ephemeral.publicKey(),
+        asset,
+        ephemeralSecret: ephemeral.secret(),
+      });
+
+      expect(horizonServer.submitTransaction).toHaveBeenCalledTimes(2);
+      const trustlineTx = horizonServer.submitTransaction.mock
+        .calls[1][0] as StellarSdk.Transaction;
+      const operations = v1Operations(trustlineTx);
+      expect(operations).toHaveLength(1);
+      expect(operations[0].body.type).toBe('changeTrust');
+    });
+
+    it('rejects an issued asset when the ephemeral secret is missing', async () => {
+      setupHappyPath();
+      const ephemeral = StellarSdk.Keypair.random();
+
+      await expect(
+        service.createEphemeralAccount({
+          ...params,
+          publicKey: ephemeral.publicKey(),
+          asset: `USDC:${FUNDING_KEYPAIR.publicKey()}`,
+        }),
+      ).rejects.toThrow(/ephemeral.*secret/i);
+
+      // The account was created, but the trustline (and contract) were not.
+      expect(horizonServer.submitTransaction).toHaveBeenCalledTimes(1);
+      expect(sorobanServer.sendTransaction).not.toHaveBeenCalled();
+    });
+
+    it('propagates a trustline submission failure', async () => {
+      setupHappyPath();
+      horizonServer.submitTransaction
+        .mockReset()
+        .mockResolvedValueOnce({ hash: 'account-created' })
+        .mockRejectedValueOnce(new Error('trustline submission failed'));
+      const ephemeral = StellarSdk.Keypair.random();
+
+      await expect(
+        service.createEphemeralAccount({
+          ...params,
+          publicKey: ephemeral.publicKey(),
+          asset: `USDC:${FUNDING_KEYPAIR.publicKey()}`,
+          ephemeralSecret: ephemeral.secret(),
+        }),
+      ).rejects.toThrow('trustline submission failed');
+
+      expect(sorobanServer.sendTransaction).not.toHaveBeenCalled();
+    });
+
     it('sends two Soroban transactions: the deployment and the initialize', async () => {
       setupHappyPath();
 

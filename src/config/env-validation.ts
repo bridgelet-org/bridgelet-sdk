@@ -55,6 +55,31 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
     errors.push('STELLAR_SWEEP_SIGNER_PROVIDER must be "env-seed" or "kms"');
   }
 
+  // #991: each allowlist entry must be a complete CODE:ISSUER pair. Catching
+  // this at startup beats rejecting every claim later with UNSUPPORTED_ASSET.
+  for (const key of [
+    'SUPPORTED_ASSETS',
+    'SUPPORTED_ASSETS_TESTNET',
+    'SUPPORTED_ASSETS_MAINNET',
+  ]) {
+    const raw = env[key];
+    if (!raw) continue;
+
+    const entries = raw
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
+
+    for (const entry of entries) {
+      if (!/^[A-Z0-9]{1,12}:G[A-Z0-9]{55}$/.test(entry)) {
+        errors.push(
+          `${key} entry "${entry}" must be a CODE:ISSUER pair ` +
+            '(e.g. USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5)',
+        );
+      }
+    }
+  }
+
   if (env.NODE_ENV === 'production') {
     const claimBaseUrl = env.CLAIM_BASE_URL;
     if (!claimBaseUrl || claimBaseUrl.trim() === '') {

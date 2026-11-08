@@ -200,6 +200,20 @@ To check coverage for a specific file:
 npm test -- sweeps.service.spec.ts --coverage
 ```
 
+### Testnet issued-asset integration test
+
+The trustline path can be exercised against Stellar testnet. It is opt-in so CI
+stays offline and deterministic:
+
+```bash
+RUN_TESTNET_INTEGRATION=true npm test -- issued-asset-trustline
+```
+
+The test funds a throwaway account with Friendbot, calls
+`StellarService.createTrustline` for `TESTNET_ASSET`, and asserts Horizon reports
+the trustline. `TESTNET_ASSET` defaults to Circle testnet USDC and accepts any
+`CODE:ISSUER` pair.
+
 ### Load testing and connection pool sizing
 
 Each app instance opens at most **10** PostgreSQL connections (`POOL_CONFIG.max` in `src/config/database.config.ts`), and a caller that cannot get a connection within **3s** (`connectionTimeoutMillis`) fails fast rather than hanging.
@@ -226,6 +240,9 @@ DATABASE_PASSWORD=postgres
 STELLAR_NETWORK=testnet
 STELLAR_HORIZON_URL=https://horizon-testnet.stellar.org
 SOROBAN_RPC_URL=https://soroban-testnet.stellar.org
+# Issued-asset allowlist (#991): comma-separated CODE:ISSUER pairs. Native XLM
+# is always allowed. Network-specific values win over SUPPORTED_ASSETS.
+SUPPORTED_ASSETS_TESTNET=USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
 
 # Smart contracts
 EPHEMERAL_ACCOUNT_CONTRACT_ID=CXXXX...   # shared ID; still used by payment monitor, sweeps and ContractProvider (NOT by account creation)
