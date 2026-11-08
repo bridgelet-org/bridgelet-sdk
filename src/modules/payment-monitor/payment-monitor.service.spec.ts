@@ -19,7 +19,8 @@ const makeAccount = (overrides: Partial<Account> = {}): Account =>
     secretKeyEncrypted: 'enc',
     fundingSource: 'GFUNDING',
     amount: '100',
-    asset: 'USDC',
+    // #991: account asset strings are CODE:ISSUER; funding must match both.
+    asset: 'USDC:GBULQKZ7SA56UKRI6LX2IB6XH3GJW2L34BMTOWMQFJBAQNPSHJJNOTGN',
     claimTokenHash: null,
     destinationAddress: null,
     // #812: since #811 this is the account's own EphemeralAccount instance.
@@ -340,6 +341,51 @@ describe('PaymentMonitorService', () => {
       expect(result).toBeNull();
     });
 
+    // #991: only the exact asset (code + issuer) and amount counts as funding.
+    it('ignores a payment with the same code but a different issuer', async () => {
+      const account = makeAccount();
+      mockCallFn.mockResolvedValueOnce({
+        records: [
+          makePaymentRecord({
+            asset_issuer:
+              'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+          }),
+        ],
+      });
+
+      const result = await service.findInboundPayment(account);
+      expect(result).toBeNull();
+    });
+
+    it('ignores a payment whose amount does not match the account', async () => {
+      const account = makeAccount();
+      mockCallFn.mockResolvedValueOnce({
+        records: [makePaymentRecord({ amount: '99.0000000' })],
+      });
+
+      const result = await service.findInboundPayment(account);
+      expect(result).toBeNull();
+    });
+
+    it('accepts an issued-asset payment that matches code, issuer and amount', async () => {
+      const account = makeAccount();
+      const payment = makePaymentRecord({ amount: '100.0000000' });
+      mockCallFn.mockResolvedValueOnce({ records: [payment] });
+
+      const result = await service.findInboundPayment(account);
+      expect(result).toEqual(payment);
+    });
+
+    it('does not treat an issued-asset payment as funding for a native account', async () => {
+      const account = makeAccount({ asset: 'native' });
+      mockCallFn.mockResolvedValueOnce({
+        records: [makePaymentRecord({ amount: '100.0000000' })],
+      });
+
+      const result = await service.findInboundPayment(account);
+      expect(result).toBeNull();
+    });
+
     // -----------------------------------------------------------------------
     // Horizon pagination (#717)
     // -----------------------------------------------------------------------
@@ -351,7 +397,7 @@ describe('PaymentMonitorService', () => {
 
       const expectedPayment = makePaymentRecord({
         paging_token: '1002',
-        amount: '500.0000000',
+        amount: '100.0000000',
         created_at: '2024-01-01T02:00:00Z',
       });
 

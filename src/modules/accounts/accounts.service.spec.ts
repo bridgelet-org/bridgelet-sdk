@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { getToken } from '@willsoto/nestjs-prometheus';
 import { AccountsService } from './accounts.service.js';
 import { Account } from './entities/account.entity.js';
@@ -50,6 +50,8 @@ const mockConfigService = {
   }),
   get: jest.fn((key: string) => {
     if (key === 'app.claimTokenExpiry') return 2592000;
+    if (key === 'stellar.network') return 'testnet';
+    if (key === 'stellar.supportedAssets') return [`USDC:${VALID_KEY2}`];
     return undefined;
   }),
 };
@@ -187,6 +189,54 @@ describe('AccountsService', () => {
       expect(mockStellarService.createEphemeralAccount).toHaveBeenCalledWith(
         expect.objectContaining({ expiresIn: 3600 }),
       );
+    });
+
+    // ─── #991: issued assets ────────────────────────────────────────────────
+
+    it('accepts an allowlisted issued asset and passes the ephemeral secret for the trustline', async () => {
+      setupCreateSuccess();
+
+      await service.create({
+        ...dto,
+        asset_code: 'USDC',
+        asset_issuer: VALID_KEY2,
+      });
+
+      expect(mockStellarService.createEphemeralAccount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          asset: `USDC:${VALID_KEY2}`,
+          ephemeralSecret: 'STEST',
+        }),
+      );
+    });
+
+    it('rejects an issued asset whose issuer is not allowlisted for the network', async () => {
+      const unsupported = {
+        ...dto,
+        asset_code: 'USDC',
+        asset_issuer: VALID_KEY,
+      };
+
+      await expect(service.create(unsupported)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(mockRepo.save).not.toHaveBeenCalled();
+      expect(mockStellarService.createEphemeralAccount).not.toHaveBeenCalled();
+    });
+
+    it('rejects issued-asset amounts with more than 7 decimal places', async () => {
+      const tooPrecise = {
+        ...dto,
+        amount: '100.12345678',
+        asset_code: 'USDC',
+        asset_issuer: VALID_KEY2,
+      };
+
+      await expect(service.create(tooPrecise)).rejects.toThrow(
+        /at most 7 decimal places/,
+      );
+      expect(mockRepo.save).not.toHaveBeenCalled();
+      expect(mockStellarService.createEphemeralAccount).not.toHaveBeenCalled();
     });
 
     it('triggers account.created webhook after success', async () => {

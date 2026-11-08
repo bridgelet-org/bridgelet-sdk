@@ -73,11 +73,17 @@ describe('stellar.config', () => {
     delete process.env.SWEEP_CONTROLLER_CONTRACT_ID;
     delete process.env.SWEEP_SIGNING_KEY_SEED;
     delete process.env.ENCRYPTION_KEY;
+    delete process.env.SUPPORTED_ASSETS;
+    delete process.env.SUPPORTED_ASSETS_TESTNET;
+    delete process.env.SUPPORTED_ASSETS_MAINNET;
   });
 
   afterEach(() => {
     delete process.env.STELLAR_NETWORK;
     delete process.env.STELLAR_HORIZON_URL;
+    delete process.env.SUPPORTED_ASSETS;
+    delete process.env.SUPPORTED_ASSETS_TESTNET;
+    delete process.env.SUPPORTED_ASSETS_MAINNET;
   });
 
   it('returns testnet defaults when env vars are not set', async () => {
@@ -115,6 +121,45 @@ describe('stellar.config', () => {
     const mod = await import('./stellar.config.js');
     const config = (mod.default as unknown as ConfigFactory)();
     expect(config.sorobanRpcUrl).toBe('https://soroban.stellar.org');
+  });
+
+  // #991: issued assets must be allowlisted per network.
+  it('defaults the supported-asset allowlist to empty', async () => {
+    const mod = await import('./stellar.config.js');
+    const config = (mod.default as unknown as ConfigFactory)();
+    expect(config.supportedAssets).toEqual([]);
+  });
+
+  it('parses a comma-separated SUPPORTED_ASSETS value', async () => {
+    process.env.SUPPORTED_ASSETS = ' USDC:GABC , EURC:GDEF ,, ';
+    const mod = await import('./stellar.config.js');
+    const config = (mod.default as unknown as ConfigFactory)();
+    expect(config.supportedAssets).toEqual(['USDC:GABC', 'EURC:GDEF']);
+  });
+
+  it('prefers the network-specific allowlist over SUPPORTED_ASSETS', async () => {
+    process.env.SUPPORTED_ASSETS = 'USDC:GLOBAL';
+    process.env.SUPPORTED_ASSETS_TESTNET = 'USDC:TESTNET';
+    const mod = await import('./stellar.config.js');
+    const config = (mod.default as unknown as ConfigFactory)();
+    expect(config.supportedAssets).toEqual(['USDC:TESTNET']);
+  });
+
+  it('uses SUPPORTED_ASSETS_MAINNET when the network is mainnet', async () => {
+    process.env.STELLAR_NETWORK = 'mainnet';
+    process.env.SUPPORTED_ASSETS_TESTNET = 'USDC:TESTNET';
+    process.env.SUPPORTED_ASSETS_MAINNET = 'USDC:MAINNET';
+    const mod = await import('./stellar.config.js');
+    const config = (mod.default as unknown as ConfigFactory)();
+    expect(config.supportedAssets).toEqual(['USDC:MAINNET']);
+  });
+
+  it('falls back to SUPPORTED_ASSETS when no network-specific value is set', async () => {
+    process.env.STELLAR_NETWORK = 'mainnet';
+    process.env.SUPPORTED_ASSETS = 'USDC:GLOBAL';
+    const mod = await import('./stellar.config.js');
+    const config = (mod.default as unknown as ConfigFactory)();
+    expect(config.supportedAssets).toEqual(['USDC:GLOBAL']);
   });
 });
 
@@ -241,6 +286,31 @@ describe('validateEnv - CLAIM_BASE_URL', () => {
         STELLAR_SWEEP_SIGNER_PROVIDER: 'hsm',
       }),
     ).toThrow('STELLAR_SWEEP_SIGNER_PROVIDER must be "env-seed" or "kms"');
+  });
+
+  it('rejects a malformed SUPPORTED_ASSETS entry at startup (#991)', async () => {
+    const { validateEnv } = await import('./env-validation.js');
+    expect(() =>
+      validateEnv({
+        ...baseValidEnv,
+        NODE_ENV: 'development',
+        SUPPORTED_ASSETS_TESTNET: 'USDC',
+      }),
+    ).toThrow(
+      'SUPPORTED_ASSETS_TESTNET entry "USDC" must be a CODE:ISSUER pair',
+    );
+  });
+
+  it('accepts a well-formed SUPPORTED_ASSETS entry (#991)', async () => {
+    const { validateEnv } = await import('./env-validation.js');
+    expect(() =>
+      validateEnv({
+        ...baseValidEnv,
+        NODE_ENV: 'development',
+        SUPPORTED_ASSETS_TESTNET:
+          'USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+      }),
+    ).not.toThrow();
   });
 
   it('starts normally without CLAIM_BASE_URL when NODE_ENV is development or test', async () => {

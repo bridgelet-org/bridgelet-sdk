@@ -22,7 +22,8 @@ const makeAccount = (overrides: Partial<Account> = {}): Account =>
     secretKeyEncrypted: 'enc',
     fundingSource: 'GFUNDING',
     amount: '100',
-    asset: 'USDC',
+    // #991: account asset strings are CODE:ISSUER; funding must match both.
+    asset: 'USDC:GBULQKZ7SA56UKRI6LX2IB6XH3GJW2L34BMTOWMQFJBAQNPSHJJNOTGN',
     claimTokenHash: null,
     destinationAddress: null,
     expiresAt: new Date(Date.now() + 86400_000),
@@ -262,6 +263,38 @@ describe('PaymentMonitorProvider', () => {
 
       expect(stellarService.recordPayment).not.toHaveBeenCalled();
     });
+
+    // #991: only the exact asset (code + issuer) and amount counts as funding.
+    it('ignores a payment with the same code but a different issuer', async () => {
+      capturedOnMessage!(
+        makePaymentRecord({
+          asset_issuer:
+            'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+        }),
+      );
+      await new Promise(setImmediate);
+
+      expect(stellarService.recordPayment).not.toHaveBeenCalled();
+      expect(accountsRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('ignores a payment whose amount does not match the account', async () => {
+      capturedOnMessage!(makePaymentRecord({ amount: '99.0000000' }));
+      await new Promise(setImmediate);
+
+      expect(stellarService.recordPayment).not.toHaveBeenCalled();
+      expect(accountsRepo.update).not.toHaveBeenCalled();
+    });
+
+    it('does not treat an issued-asset payment as funding for a native account', async () => {
+      service.unwatch('acc-uuid-1');
+      service.watch(makeAccount({ asset: 'native' }));
+      capturedOnMessage!(makePaymentRecord());
+
+      await new Promise(setImmediate);
+
+      expect(stellarService.recordPayment).not.toHaveBeenCalled();
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -456,7 +489,7 @@ describe('PaymentMonitorProvider', () => {
     });
 
     it('converts "1.5000000" to 15_000_000n stroops', async () => {
-      service.watch(makeAccount());
+      service.watch(makeAccount({ amount: '1.5' }));
       capturedOnMessage!(makePaymentRecord({ amount: '1.5000000' }));
       await new Promise(setImmediate);
 

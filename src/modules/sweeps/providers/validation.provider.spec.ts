@@ -1,6 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  UnprocessableEntityException,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import { Account } from '../../accounts/entities/account.entity.js';
 import { ValidationProvider } from './validation.provider.js';
@@ -30,6 +35,14 @@ describe('ValidationProvider', () => {
         {
           provide: getRepositoryToken(Account),
           useClass: Repository,
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest
+              .fn()
+              .mockReturnValue('https://horizon-testnet.stellar.org'),
+          },
         },
       ],
     }).compile();
@@ -457,6 +470,138 @@ describe('ValidationProvider', () => {
 
       expect(caughtError).toBe(networkError);
       expect(caughtError).not.toBeInstanceOf(BadRequestException);
+    });
+  });
+
+  describe('assertDestinationTrustsAsset (#991)', () => {
+    const destination = 'GD5J6HLF5666X4AZLTFTXGKWDBSUXSWXP6P5F20O1337';
+    const issuer = 'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665O';
+    const asset = `USDC:${issuer}`;
+
+    const mockServer = (balances: unknown[]) =>
+      ({
+        loadAccount: jest.fn().mockResolvedValue({ balances }),
+      }) as unknown as Horizon.Server;
+
+    it('does not require a trustline for native XLM', async () => {
+      const server = mockServer([]);
+
+      await expect(
+        provider.assertDestinationTrustsAsset(
+          destination,
+          'native',
+          '100',
+          server,
+        ),
+      ).resolves.toBeUndefined();
+      expect(server.loadAccount).not.toHaveBeenCalled();
+    });
+
+    it('resolves when the destination trusts the exact issuer with enough limit', async () => {
+      const server = mockServer([
+        {
+          asset_type: 'credit_alphanum4',
+          asset_code: 'USDC',
+          asset_issuer: issuer,
+          balance: '0.0000000',
+          limit: '1000.0000000',
+        },
+      ]);
+
+      await expect(
+        provider.assertDestinationTrustsAsset(
+          destination,
+          asset,
+          '100',
+          server,
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it('throws DESTINATION_MISSING_TRUSTLINE when the destination has no matching line', async () => {
+      const server = mockServer([
+        {
+          asset_type: 'credit_alphanum4',
+          asset_code: 'USDC',
+          asset_issuer:
+            'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF',
+          limit: '1000.0000000',
+        },
+      ]);
+
+      let caughtError: unknown;
+      try {
+        await provider.assertDestinationTrustsAsset(
+          destination,
+          asset,
+          '100',
+          server,
+        );
+      } catch (err) {
+        caughtError = err;
+      }
+
+      expect(caughtError).toBeInstanceOf(UnprocessableEntityException);
+      const res = (
+        caughtError as UnprocessableEntityException
+      ).getResponse() as Record<string, unknown>;
+      expect(res.code).toBe('DESTINATION_MISSING_TRUSTLINE');
+    });
+
+    it('throws DESTINATION_TRUSTLINE_LIMIT_EXCEEDED when the limit is below the amount', async () => {
+      const server = mockServer([
+        {
+          asset_type: 'credit_alphanum4',
+          asset_code: 'USDC',
+          asset_issuer: issuer,
+          balance: '0.0000000',
+          limit: '50.0000000',
+        },
+      ]);
+
+      let caughtError: unknown;
+      try {
+        await provider.assertDestinationTrustsAsset(
+          destination,
+          asset,
+          '100',
+          server,
+        );
+      } catch (err) {
+        caughtError = err;
+      }
+
+      expect(caughtError).toBeInstanceOf(UnprocessableEntityException);
+      const res = (
+        caughtError as UnprocessableEntityException
+      ).getResponse() as Record<string, unknown>;
+      expect(res.code).toBe('DESTINATION_TRUSTLINE_LIMIT_EXCEEDED');
+    });
+
+    it('is invoked during validateSweepParameters for issued assets', async () => {
+      jest.spyOn(repo, 'findOne').mockResolvedValue(
+        mockAccount({
+          publicKey: 'GABC123',
+          amount: '100',
+          asset,
+        }),
+      );
+      const trustlineSpy = jest
+        .spyOn(provider, 'assertDestinationTrustsAsset')
+        .mockResolvedValue();
+
+      await expect(
+        provider.validateSweepParameters({
+          accountId: 'acc-123',
+          ephemeralPublicKey: 'GABC123',
+          ephemeralSecret: 'SABC123',
+          destinationAddress: destination,
+          amount: '100',
+          asset,
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(trustlineSpy).toHaveBeenCalledWith(destination, asset, '100');
     });
   });
 });

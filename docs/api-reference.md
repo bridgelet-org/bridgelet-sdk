@@ -69,7 +69,7 @@ token — see [Where the claim token comes from](#where-the-claim-token-comes-fr
 | ------------------ | -------- | ------------------------------------------------------------------------- |
 | `fundingSource`    | Yes      | Stellar public key funding the account. StrKey-validated.                 |
 | `recovery_address` | Yes      | Where funds go if the account expires unclaimed.                          |
-| `amount`           | Yes      | Decimal string, 7 decimal places.                                         |
+| `amount`           | Yes      | Decimal string. Issued assets allow at most 7 decimal places.             |
 | `asset_code`       | No       | 1–12 uppercase alphanumerics. Use `native` for XLM.                       |
 | `asset_issuer`     | No       | Required when `asset_code` is a non-native issued asset.                  |
 | `expiresIn`        | No       | Seconds, 1 hour – 30 days. See [`expiresIn`](#createaccountdtoexpiresin). |
@@ -100,8 +100,15 @@ creation time.
 The ephemeral account's Stellar **secret key is never returned**. It is
 encrypted at rest and only decrypted in-memory at redemption time.
 
-**Errors:** `400` invalid input · `401` missing/invalid API JWT · `429`
-rate limited
+**Issued assets (#991):** only assets on the server's per-network allowlist
+(`SUPPORTED_ASSETS_<NETWORK>` / `SUPPORTED_ASSETS`, as `CODE:ISSUER` pairs) are
+accepted; anything else returns `400 UNSUPPORTED_ASSET`. After the ephemeral
+account is created, the SDK submits a `changeTrust` for the asset signed by the
+ephemeral key before the account is reported ready for payment. Amounts for
+issued assets may have at most 7 decimal places.
+
+**Errors:** `400` invalid input or unsupported asset · `401` missing/invalid
+API JWT · `429` rate limited
 
 #### `metadata` handling
 
@@ -247,7 +254,15 @@ Redeeming an already-redeemed token is idempotent and returns the original
 result with `message: "Claim was already redeemed"`.
 
 **Errors:** `400` invalid destination / not yet funded · `401` invalid or
-expired token · `409` already being processed · `429` rate limited
+expired token · `409` already being processed · `422` destination missing a
+trustline or with too low a limit for the account's issued asset
+(`DESTINATION_MISSING_TRUSTLINE` / `DESTINATION_TRUSTLINE_LIMIT_EXCEEDED`) ·
+`429` rate limited
+
+For issued assets the destination must already trust the exact issuer with
+enough limit before the claim is attempted. The check runs before the sweep
+contract is called; the account stays retryable in `PENDING_CLAIM`, so the
+recipient can add the trustline and retry with the same token.
 
 ### `GET /claims/:id`
 

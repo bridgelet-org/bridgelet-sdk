@@ -20,6 +20,11 @@ import { sanitizeMetadata } from '../../common/utils/metadata-sanitizer.util.js'
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter } from 'prom-client';
 import { AccountLatencyMetricsProvider } from './providers/account-latency-metrics.provider.js';
+import {
+  assertAssetSupported,
+  assertIssuedAssetAmountPrecision,
+  isNativeAsset,
+} from '../../common/utils/stellar-asset.util.js';
 
 /**
  * AccountsService — Service-Level Documentation & Contributor Guidance
@@ -145,6 +150,18 @@ export class AccountsService {
         ? `${createAccountDto.asset_code}:${createAccountDto.asset_issuer}`
         : (createAccountDto.asset_code ?? 'native');
 
+    // #991: issued assets must be on the per-network allowlist, and their
+    // amounts must fit Stellar's 7-decimal precision. Reject before any DB row
+    // or on-chain account is created.
+    if (!isNativeAsset(asset)) {
+      assertAssetSupported(
+        asset,
+        this.configService.get<string[]>('stellar.supportedAssets') ?? [],
+        this.configService.get<string>('stellar.network'),
+      );
+      assertIssuedAssetAmountPrecision(createAccountDto.amount);
+    }
+
     // Save with INITIALIZING status first so we have a DB record for cleanup
     // if the Stellar/contract steps fail
     const account = this.accountsRepository.create({
@@ -177,6 +194,9 @@ export class AccountsService {
           sweepControllerContractId: this.configService.getOrThrow<string>(
             'stellar.contracts.sweepController',
           ),
+          // #991: signed by the ephemeral key to establish the issued-asset
+          // trustline right after the account is created.
+          ephemeralSecret: ephemeralKeypair.secret(),
         });
 
       // Both Horizon and contract succeeded — advance to real status.

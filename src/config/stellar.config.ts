@@ -7,6 +7,10 @@ export default registerAs('stellar', () => ({
   sorobanRpcUrl:
     process.env.STELLAR_SOROBAN_RPC_URL ||
     'https://soroban-testnet.stellar.org',
+  // #991: issued-asset allowlist for the configured network. `SUPPORTED_ASSETS_<NETWORK>`
+  // wins over the network-agnostic `SUPPORTED_ASSETS`, so testnet and mainnet can
+  // trust different issuers for the same code.
+  supportedAssets: getSupportedAssets(),
   fundingSecret: process.env.FUNDING_ACCOUNT_SECRET,
   recoveryPublic: process.env.RECOVERY_ACCOUNT_PUBLIC,
   contracts: {
@@ -46,4 +50,23 @@ function getNetwork(): 'mainnet' | 'testnet' {
     );
   }
   return network;
+}
+
+/**
+ * Reads the issued-asset allowlist. A network-specific value
+ * (`SUPPORTED_ASSETS_TESTNET` / `SUPPORTED_ASSETS_MAINNET`) takes precedence
+ * over `SUPPORTED_ASSETS`, and entries are comma-separated `CODE:ISSUER`
+ * pairs (e.g. `USDC:GBBD...`). An empty value means issued assets are refused.
+ */
+function getSupportedAssets(): string[] {
+  const network = getNetwork().toUpperCase();
+  const raw =
+    process.env[`SUPPORTED_ASSETS_${network}`] ??
+    process.env.SUPPORTED_ASSETS ??
+    '';
+
+  return raw
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
 }

@@ -2,15 +2,33 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  UnprocessableEntityException,
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { IsNull, Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Horizon, NotFoundError } from '@stellar/stellar-sdk';
 import { Account } from '../../accounts/entities/account.entity.js';
 import type { SweepExecutionRequest } from '../interfaces/execute-sweep.interface.js';
 import { AccountStatus } from '../../accounts/enums/account-status.enum.js';
 import { StellarAddressValidator } from '../../../common/validators/stellar-address.validator.js';
+import {
+  isNativeAsset,
+  parseAmountToStroops,
+  parseAsset,
+} from '../../../common/utils/stellar-asset.util.js';
+
+interface DestinationBalance {
+  asset_type?: string;
+  asset_code?: string;
+  asset_issuer?: string;
+  limit?: string;
+}
+
+interface HorizonAccountWithBalances {
+  balances?: DestinationBalance[];
+}
 
 @Injectable()
 export class ValidationProvider {
@@ -19,6 +37,7 @@ export class ValidationProvider {
   constructor(
     @InjectRepository(Account)
     private readonly accountRepository: Repository<Account>,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -47,57 +66,147 @@ export class ValidationProvider {
       | { loadAccount: (id: string) => Promise<unknown> }
       | string,
   ): Promise<void> {
-    let server: { loadAccount: (id: string) => Promise<unknown> };
+    await ValidationProvider.loadDestinationAccount(
+      destinationAddress,
+      horizonServerOrUrl,
+    );
+  }
+
+  /**
+   * Asserts that the destination can actually receive the account's asset
+   * (#991).
+   *
+   * For issued assets a classic payment fails unless the destination already
+   * holds a trustline to the exact issuer with enough remaining limit. Without
+   * this check the failure only surfaces in step 4 of the sweep — after the
+   * contract has authorised the sweep and moved the account into `Swept`,
+   * leaving a PARTIAL_SWEEP that needs manual recovery. Checking before the
+   * contract call keeps the claim retryable and returns a stable 422.
+   */
+  public async assertDestinationTrustsAsset(
+    destinationAddress: string,
+    asset: string,
+    amount: string,
+    horizonServerOrUrl?:
+      | { loadAccount: (id: string) => Promise<unknown> }
+      | string,
+  ): Promise<void> {
+    // Native XLM needs no trustline and cannot be rejected this way.
+    if (isNativeAsset(asset)) return;
+
+    const server =
+      horizonServerOrUrl ??
+      this.configService.get<string>('stellar.horizonUrl');
+    const rawAccount = await ValidationProvider.loadDestinationAccount(
+      destinationAddress,
+      server,
+    );
+    const account = rawAccount as HorizonAccountWithBalances;
+    const parsed = parseAsset(asset);
+
+    const line = (account.balances ?? []).find(
+      (balance) =>
+        balance.asset_type !== 'native' &&
+        balance.asset_code === parsed.code &&
+        balance.asset_issuer === parsed.issuer,
+    );
+
+    if (!line) {
+      throw new UnprocessableEntityException({
+        statusCode: 422,
+        error: 'DESTINATION_MISSING_TRUSTLINE',
+        code: 'DESTINATION_MISSING_TRUSTLINE',
+        message:
+          `Destination address does not have a trustline for ${asset}. ` +
+          `Add a trustline for ${parsed.code} issued by ${parsed.issuer} before claiming.`,
+      });
+    }
+
+    if (line.limit !== undefined) {
+      const limit = parseAmountToStroops(line.limit);
+      const requested = parseAmountToStroops(amount);
+      if (requested > limit) {
+        throw new UnprocessableEntityException({
+          statusCode: 422,
+          error: 'DESTINATION_TRUSTLINE_LIMIT_EXCEEDED',
+          code: 'DESTINATION_TRUSTLINE_LIMIT_EXCEEDED',
+          message:
+            `Destination trustline limit for ${asset} is ${line.limit}, ` +
+            `which is below the sweep amount ${amount}.`,
+        });
+      }
+    }
+  }
+
+  private static async loadDestinationAccount(
+    destinationAddress: string,
+    horizonServerOrUrl?:
+      | { loadAccount: (id: string) => Promise<unknown> }
+      | string,
+  ): Promise<unknown> {
+    const server = ValidationProvider.resolveHorizonServer(horizonServerOrUrl);
+
+    try {
+      return await server.loadAccount(destinationAddress);
+    } catch (error: unknown) {
+      ValidationProvider.handleDestinationLoadError(error);
+    }
+  }
+
+  private static resolveHorizonServer(
+    horizonServerOrUrl?:
+      | { loadAccount: (id: string) => Promise<unknown> }
+      | string,
+  ): { loadAccount: (id: string) => Promise<unknown> } {
     if (
       horizonServerOrUrl &&
       typeof horizonServerOrUrl === 'object' &&
       'loadAccount' in horizonServerOrUrl &&
       typeof horizonServerOrUrl.loadAccount === 'function'
     ) {
-      server = horizonServerOrUrl;
-    } else if (
+      return horizonServerOrUrl;
+    }
+
+    if (
       typeof horizonServerOrUrl === 'string' &&
       horizonServerOrUrl.trim() !== ''
     ) {
-      server = new Horizon.Server(horizonServerOrUrl);
-    } else {
-      const url =
-        process.env.STELLAR_HORIZON_URL ||
-        'https://horizon-testnet.stellar.org';
-      server = new Horizon.Server(url);
+      return new Horizon.Server(horizonServerOrUrl);
     }
 
-    try {
-      await server.loadAccount(destinationAddress);
-    } catch (error: unknown) {
-      let isNotFound = false;
-      if (error instanceof NotFoundError) {
-        isNotFound = true;
-      } else if (error && typeof error === 'object') {
-        const errObj = error as {
-          name?: string;
-          status?: number;
-          response?: { status?: number };
-        };
-        isNotFound =
-          errObj.name === 'NotFoundError' ||
-          errObj.status === 404 ||
-          errObj.response?.status === 404;
-      }
+    const url =
+      process.env.STELLAR_HORIZON_URL || 'https://horizon-testnet.stellar.org';
+    return new Horizon.Server(url);
+  }
 
-      if (isNotFound) {
-        throw new BadRequestException({
-          statusCode: 400,
-          error: 'DESTINATION_NOT_FUNDED',
-          code: 'DESTINATION_NOT_FUNDED',
-          message:
-            'Destination address does not exist on Stellar network and is not funded',
-        });
-      }
-
-      // Treat network/transient errors as transient; do not report as "not funded"
-      throw error;
+  private static handleDestinationLoadError(error: unknown): never {
+    let isNotFound = false;
+    if (error instanceof NotFoundError) {
+      isNotFound = true;
+    } else if (error && typeof error === 'object') {
+      const errObj = error as {
+        name?: string;
+        status?: number;
+        response?: { status?: number };
+      };
+      isNotFound =
+        errObj.name === 'NotFoundError' ||
+        errObj.status === 404 ||
+        errObj.response?.status === 404;
     }
+
+    if (isNotFound) {
+      throw new BadRequestException({
+        statusCode: 400,
+        error: 'DESTINATION_NOT_FUNDED',
+        code: 'DESTINATION_NOT_FUNDED',
+        message:
+          'Destination address does not exist on Stellar network and is not funded',
+      });
+    }
+
+    // Treat network/transient errors as transient; do not report as "not funded"
+    throw error;
   }
 
   /**
@@ -184,6 +293,15 @@ export class ValidationProvider {
         `Asset mismatch: expected ${account.asset}, got ${sweepExecutionRequest.asset}`,
       );
     }
+
+    // #991: verify the destination can receive this asset BEFORE the sweep
+    // contract is invoked. Otherwise a missing/lower trustline fails at the
+    // final Horizon payment, after the contract is already in Swept state.
+    await this.assertDestinationTrustsAsset(
+      sweepExecutionRequest.destinationAddress,
+      account.asset,
+      account.amount,
+    );
 
     this.logger.log(
       `Validation passed for account: ${sweepExecutionRequest.accountId}`,

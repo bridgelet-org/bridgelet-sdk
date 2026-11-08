@@ -13,6 +13,10 @@ import { Account } from '../accounts/entities/account.entity.js';
 import { AccountStatus } from '../accounts/enums/account-status.enum.js';
 import { assertValidAccountStatusTransition } from '../accounts/enums/account-status-transition.util.js';
 import { IntervalJobRunner } from '../../common/utils/interval-job-runner.js';
+import {
+  parseAmountToStroops,
+  paymentMatchesAsset,
+} from '../../common/utils/stellar-asset.util.js';
 
 /**
  * PaymentMonitorService - interval-based payment detection.
@@ -161,6 +165,17 @@ export class PaymentMonitorService implements OnModuleInit, OnModuleDestroy {
           record as StellarSdk.Horizon.ServerApi.PaymentOperationRecord;
         if (payment.to !== account.publicKey) continue;
         if (payment.created_at < cutoff) continue;
+        // #991: the funding payment must be the *exact* asset the account was
+        // created for (code + issuer, not just code) and the expected amount.
+        // Otherwise a look-alike USDC from another issuer, or a stray partial
+        // payment, would be recorded as funding.
+        if (!paymentMatchesAsset(account.asset, payment)) continue;
+        if (
+          parseAmountToStroops(payment.amount) !==
+          parseAmountToStroops(account.amount)
+        ) {
+          continue;
+        }
         return payment;
       }
 
@@ -202,7 +217,7 @@ export class PaymentMonitorService implements OnModuleInit, OnModuleDestroy {
     );
 
     const assetAddress = this.resolveAssetAddress(record);
-    const amountBigint = this.parseAmountToStroops(record.amount);
+    const amountBigint = parseAmountToStroops(record.amount);
 
     try {
       await this.stellarService.recordPayment({
@@ -262,11 +277,5 @@ export class PaymentMonitorService implements OnModuleInit, OnModuleDestroy {
         : new StellarSdk.Asset(record.asset_code!, record.asset_issuer);
 
     return asset.contractId(networkPassphrase);
-  }
-
-  private parseAmountToStroops(amount: string): bigint {
-    const [whole, fraction = ''] = amount.split('.');
-    const paddedFraction = fraction.padEnd(7, '0').slice(0, 7);
-    return BigInt(whole) * 10_000_000n + BigInt(paddedFraction);
   }
 }
