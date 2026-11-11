@@ -18,6 +18,7 @@ import {
   parseAmountToStroops,
   paymentMatchesAsset,
 } from '../../common/utils/stellar-asset.util.js';
+import { AccountEventsProvider } from '../account-events/providers/account-events.provider.js';
 
 /**
  * PaymentMonitorService - interval-based payment detection.
@@ -72,6 +73,7 @@ export class PaymentMonitorService implements OnModuleInit, OnModuleDestroy {
     private readonly stellarService: StellarService,
     private readonly configService: ConfigService,
     private readonly paymentMonitorHealth: PaymentMonitorHealthProvider,
+    private readonly accountEventsProvider: AccountEventsProvider,
   ) {
     const horizonUrl =
       this.configService.getOrThrow<string>('stellar.horizonUrl');
@@ -263,11 +265,33 @@ export class PaymentMonitorService implements OnModuleInit, OnModuleDestroy {
     );
 
     // Atomic: only transition from PENDING_PAYMENT → PENDING_CLAIM, never backwards
-    await this.accountsRepository.update(
+    const result = await this.accountsRepository.update(
       { id: account.id, status: AccountStatus.PENDING_PAYMENT },
       { status: AccountStatus.PENDING_CLAIM },
     );
+
+    if (result.affected !== 1) {
+      this.logger.debug(
+        `Account ${account.id} was no longer PENDING_PAYMENT; funded event skipped`,
+      );
+      return;
+    }
+
+    await this.accountEventsProvider.record({
+      accountId: account.id,
+      type: 'funded',
+      txHash: record.transaction_hash ?? null,
+      details: {
+        amount: account.amount,
+        assetCode: this.eventAssetCode(account.asset),
+      },
+    });
     this.logger.log(`Account ${account.id} status → PENDING_CLAIM`);
+  }
+
+  private eventAssetCode(asset: string): string {
+    const [code] = asset.split(':');
+    return code === 'native' ? 'XLM' : code;
   }
 
   protected resolveAssetAddress(

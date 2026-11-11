@@ -13,6 +13,7 @@ import { CreateAccountDto } from './dto/create-account.dto.js';
 import { AccountLatencyMetricsProvider } from './providers/account-latency-metrics.provider.js';
 import { KmsKeyProvider } from '../../common/crypto/kms-key.provider.js';
 import { Registry, register } from 'prom-client';
+import { AccountEventsProvider } from '../account-events/providers/account-events.provider.js';
 
 const VALID_KEY = 'G' + 'A'.repeat(55);
 const VALID_KEY2 = 'G' + 'B'.repeat(55);
@@ -60,6 +61,11 @@ const mockWebhooksService = {
   triggerEvent: jest.fn().mockResolvedValue(undefined),
 };
 
+const mockAccountEventsProvider = {
+  record: jest.fn().mockResolvedValue(undefined),
+  findByAccountId: jest.fn().mockResolvedValue([]),
+};
+
 function makeAccount(overrides: Partial<Account> = {}): Account {
   return {
     id: 'uuid-1',
@@ -101,6 +107,10 @@ describe('AccountsService', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: WebhooksService, useValue: mockWebhooksService },
+        {
+          provide: AccountEventsProvider,
+          useValue: mockAccountEventsProvider,
+        },
         AccountLatencyMetricsProvider,
         {
           provide: getToken('account_creation_total'),
@@ -281,6 +291,41 @@ describe('AccountsService', () => {
 
       await expect(service.create(dto)).rejects.toThrow('raw string error');
     });
+
+    it('records created and contract_deployed events on success', async () => {
+      setupCreateSuccess();
+
+      await service.create(dto);
+
+      const types = mockAccountEventsProvider.record.mock.calls.map(
+        ([event]) => event.type,
+      );
+      expect(types).toEqual(['created', 'contract_deployed']);
+      expect(mockAccountEventsProvider.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'contract_deployed',
+          txHash: 'txhash-abc',
+        }),
+      );
+    });
+
+    it('records a failed event with a reason when creation fails', async () => {
+      const saved = makeAccount({ status: AccountStatus.INITIALIZING });
+      mockRepo.create.mockReturnValue(saved);
+      mockRepo.save.mockResolvedValue(saved);
+      mockStellarService.createEphemeralAccount.mockRejectedValue(
+        new Error('Horizon error'),
+      );
+
+      await expect(service.create(dto)).rejects.toThrow('Horizon error');
+
+      expect(mockAccountEventsProvider.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'failed',
+          details: expect.objectContaining({ reason: 'Horizon error' }),
+        }),
+      );
+    });
   });
 
   // ─── findOne ─────────────────────────────────────────────────────────────
@@ -323,6 +368,30 @@ describe('AccountsService', () => {
   });
 
   // ─── findAll ─────────────────────────────────────────────────────────────
+
+  describe('findEvents', () => {
+    it('returns events for a live account', async () => {
+      const events = [{ id: 'event-1', type: 'created' }];
+      mockRepo.findOne.mockResolvedValue(makeAccount());
+      mockAccountEventsProvider.findByAccountId.mockResolvedValue(events);
+
+      const result = await service.findEvents('uuid-1');
+
+      expect(mockAccountEventsProvider.findByAccountId).toHaveBeenCalledWith(
+        'uuid-1',
+      );
+      expect(result).toBe(events);
+    });
+
+    it('throws NotFoundException for an unknown or soft-deleted account', async () => {
+      mockRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.findEvents('missing-id')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockAccountEventsProvider.findByAccountId).not.toHaveBeenCalled();
+    });
+  });
 
   describe('findAll', () => {
     function makeQueryBuilder(accounts: Account[], total: number) {

@@ -25,6 +25,8 @@ import {
   assertIssuedAssetAmountPrecision,
   isNativeAsset,
 } from '../../common/utils/stellar-asset.util.js';
+import { AccountEventsProvider } from '../account-events/providers/account-events.provider.js';
+import { AccountEvent } from '../account-events/entities/account-event.entity.js';
 
 /**
  * AccountsService — Service-Level Documentation & Contributor Guidance
@@ -122,6 +124,7 @@ export class AccountsService {
     private readonly accountCreationCounter: Counter<string>,
     private latencyMetrics: AccountLatencyMetricsProvider,
     private kmsKeyProvider: KmsKeyProvider,
+    private accountEventsProvider: AccountEventsProvider,
   ) {}
 
   public async create(
@@ -181,6 +184,15 @@ export class AccountsService {
 
     await this.accountsRepository.save(account);
 
+    await this.accountEventsProvider.record({
+      accountId: account.id,
+      type: 'created',
+      details: {
+        amount: account.amount,
+        assetCode: this.eventAssetCode(account.asset),
+      },
+    });
+
     try {
       // #811: no contract ID is passed in — createEphemeralAccount deploys a
       // dedicated EphemeralAccount instance per account and returns its ID.
@@ -211,6 +223,13 @@ export class AccountsService {
       account.status = AccountStatus.PENDING_PAYMENT;
       account.contractId = contractId;
       await this.accountsRepository.save(account);
+
+      await this.accountEventsProvider.record({
+        accountId: account.id,
+        type: 'contract_deployed',
+        txHash,
+        details: { deployed: true },
+      });
 
       await this.webhooksService.triggerEvent('account.created', {
         accountId: account.id,
@@ -258,6 +277,14 @@ export class AccountsService {
       await this.accountsRepository.save(account);
 
       const message = error instanceof Error ? error.message : String(error);
+      await this.accountEventsProvider.record({
+        accountId: account.id,
+        type: 'failed',
+        details: {
+          reason: message,
+          phase: account.contractId ? 'post_deploy' : 'contract_deployment',
+        },
+      });
       this.logger.error(
         `Account creation failed for ${ephemeralKeypair.publicKey()}: ${message}`,
       );
@@ -280,6 +307,19 @@ export class AccountsService {
     }
 
     return this.mapToResponseDto(account);
+  }
+
+  public async findEvents(id: string): Promise<AccountEvent[]> {
+    const account = await this.accountsRepository.findOne({
+      where: { id, deletedAt: IsNull() },
+      select: ['id'],
+    });
+
+    if (!account) {
+      throw new NotFoundException(`Account ${id} not found`);
+    }
+
+    return this.accountEventsProvider.findByAccountId(id);
   }
 
   public async findAll({
@@ -307,6 +347,11 @@ export class AccountsService {
       accounts: accounts.map((acc) => this.mapToResponseDto(acc)),
       total,
     };
+  }
+
+  private eventAssetCode(asset: string): string {
+    const [code] = asset.split(':');
+    return code === 'native' ? 'XLM' : code;
   }
 
   private generateClaimToken(publicKey: string): string {

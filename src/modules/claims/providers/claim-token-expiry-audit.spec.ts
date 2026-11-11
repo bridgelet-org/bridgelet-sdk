@@ -13,6 +13,7 @@ import { SweepsService } from '../../sweeps/sweeps.service.js';
 import { WebhooksService } from '../../webhooks/webhooks.service.js';
 import { ClaimAuditProvider } from './claim-audit.provider.js';
 import { KmsKeyProvider } from '../../../common/crypto/kms-key.provider.js';
+import { AccountEventsProvider } from '../../account-events/providers/account-events.provider.js';
 import { ValidationProvider } from '../../sweeps/providers/validation.provider.js';
 
 const VALID_DESTINATION =
@@ -137,6 +138,10 @@ describe('Claim token expiry vs. account expiry (audit)', () => {
           {
             provide: KmsKeyProvider,
             useValue: { getEncryptionKey: () => 'f'.repeat(64) },
+          },
+          {
+            provide: AccountEventsProvider,
+            useValue: { record: jest.fn() },
           },
         ],
       }).compile();

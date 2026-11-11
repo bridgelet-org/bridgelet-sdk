@@ -7,6 +7,7 @@ import { AccountStatus } from '../accounts/enums/account-status.enum.js';
 import { PaymentMonitorService } from './payment-monitor.service.js';
 import { StellarService } from '../stellar/stellar.service.js';
 import { PaymentMonitorHealthProvider } from '../../common/metrics/payment-monitor-health.provider.js';
+import { AccountEventsProvider } from '../account-events/providers/account-events.provider.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -80,6 +81,10 @@ jest.mock('@stellar/stellar-sdk', () => {
 // Tests
 // ---------------------------------------------------------------------------
 
+const mockAccountEventsProvider = {
+  record: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('PaymentMonitorService', () => {
   let service: PaymentMonitorService;
   let onModuleInitSpy: jest.SpiedFunction<
@@ -99,6 +104,7 @@ describe('PaymentMonitorService', () => {
 
   beforeEach(async () => {
     jest.useFakeTimers();
+    mockAccountEventsProvider.record.mockClear();
     mockCallFn.mockReset();
     mockPaymentsBuilder.forAccount.mockClear();
     mockPaymentsBuilder.order.mockClear();
@@ -143,6 +149,10 @@ describe('PaymentMonitorService', () => {
         {
           provide: PaymentMonitorHealthProvider,
           useValue: paymentMonitorHealth,
+        },
+        {
+          provide: AccountEventsProvider,
+          useValue: mockAccountEventsProvider,
         },
       ],
     }).compile();
@@ -265,6 +275,29 @@ describe('PaymentMonitorService', () => {
         { id: 'acc-uuid-1', status: AccountStatus.PENDING_PAYMENT },
         { status: AccountStatus.PENDING_CLAIM },
       );
+    });
+
+    it('records a funded event only when the status update wins', async () => {
+      const account = makeAccount();
+      const payment = makePaymentRecord({
+        transaction_hash: 'b'.repeat(64),
+      });
+
+      await service.processPayment(account, payment);
+
+      expect(mockAccountEventsProvider.record).toHaveBeenCalledWith({
+        accountId: account.id,
+        type: 'funded',
+        txHash: 'b'.repeat(64),
+        details: { amount: account.amount, assetCode: 'USDC' },
+      });
+
+      mockAccountEventsProvider.record.mockClear();
+      accountsRepo.update.mockResolvedValueOnce({ affected: 0, raw: [] });
+
+      await service.processPayment(account, payment);
+
+      expect(mockAccountEventsProvider.record).not.toHaveBeenCalled();
     });
 
     // -----------------------------------------------------------------------

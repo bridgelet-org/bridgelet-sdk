@@ -4,6 +4,7 @@ import { PaymentMonitorProvider } from './providers/payment-monitor-provider.js'
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Account } from '../accounts/entities/account.entity.js';
 import { makeHistogramProvider } from '@willsoto/nestjs-prometheus';
+import { AccountEventsModule } from '../account-events/account-events.module.js';
 
 const sorobanRpcLatencyHistogram = makeHistogramProvider({
   name: 'soroban_rpc_latency_seconds',
@@ -11,7 +12,7 @@ const sorobanRpcLatencyHistogram = makeHistogramProvider({
 });
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Account])],
+  imports: [TypeOrmModule.forFeature([Account]), AccountEventsModule],
   providers: [
     StellarService,
     PaymentMonitorProvider,

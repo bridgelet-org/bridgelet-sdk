@@ -12,6 +12,7 @@ import { ClaimRedemptionProvider } from './providers/claim-redemption.provider.j
 import { ClaimAuditProvider } from './providers/claim-audit.provider.js';
 import { SweepsModule } from '../sweeps/sweeps.module.js';
 import { WebhooksModule } from '../webhooks/webhooks.module.js';
+import { AccountEventsModule } from '../account-events/account-events.module.js';
 import { makeCounterProvider } from '@willsoto/nestjs-prometheus';
 
 const claimRedemptionCounter = makeCounterProvider({
@@ -24,6 +25,7 @@ const claimRedemptionCounter = makeCounterProvider({
     TypeOrmModule.forFeature([Claim, Account, ClaimAuditLog]),
     SweepsModule,
     WebhooksModule,
+    AccountEventsModule,
   ],
   controllers: [ClaimsController],
   providers: [

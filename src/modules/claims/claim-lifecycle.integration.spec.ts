@@ -41,6 +41,7 @@ import { StellarService } from '../stellar/stellar.service.js';
 import { WebhooksService } from '../webhooks/webhooks.service.js';
 import { KmsKeyProvider } from '../../common/crypto/kms-key.provider.js';
 import { SecretEncryptionUtil } from '../../common/crypto/secret-encryption.util.js';
+import { AccountEventsProvider } from '../account-events/providers/account-events.provider.js';
 
 const VALID_DESTINATION =
   'GBULQKZ7SA56UKRI6LX2IB6XH3GJW2L34BMTOWMQFJBAQNPSHJJNOTGN';
@@ -206,6 +207,10 @@ describe('Claim redemption lifecycle (integration) [issue #820]', () => {
         { provide: WebhooksService, useValue: webhooksService },
         { provide: ClaimAuditProvider, useValue: claimAuditProvider },
         { provide: KmsKeyProvider, useValue: kmsKeyProvider },
+        {
+          provide: AccountEventsProvider,
+          useValue: { record: jest.fn().mockResolvedValue(undefined) },
+        },
         { provide: ConfigService, useValue: configService },
         {
           provide: SweepMetricsProvider,

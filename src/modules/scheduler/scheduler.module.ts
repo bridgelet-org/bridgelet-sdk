@@ -5,6 +5,7 @@ import { StellarModule } from '../stellar/stellar.module.js';
 import { SchedulerService } from './scheduler.service.js';
 import { WebhooksModule } from '../webhooks/webhooks.module.js';
 import { makeCounterProvider } from '@willsoto/nestjs-prometheus';
+import { AccountEventsModule } from '../account-events/account-events.module.js';
 
 const expiryJobFailuresCounter = makeCounterProvider({
   name: 'expiry_job_failures_total',
@@ -12,7 +13,12 @@ const expiryJobFailuresCounter = makeCounterProvider({
 });
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Account]), StellarModule, WebhooksModule],
+  imports: [
+    TypeOrmModule.forFeature([Account]),
+    StellarModule,
+    WebhooksModule,
+    AccountEventsModule,
+  ],
   providers: [SchedulerService, expiryJobFailuresCounter],
 })
 export class SchedulerModule {}

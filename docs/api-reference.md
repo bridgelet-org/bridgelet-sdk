@@ -13,6 +13,7 @@ An OpenAPI/Swagger UI is also served by the running app (see
 - [Accounts](#accounts)
   - [`POST /accounts`](#post-accounts)
   - [`GET /accounts/:id`](#get-accountsid)
+  - [`GET /accounts/:id/events`](#get-accountsidevents)
   - [`GET /accounts`](#get-accounts)
   - [`CreateAccountDto.expiresIn`](#createaccountdtoexpiresin)
 - [Claims](#claims)
@@ -132,6 +133,32 @@ Fetch the current lifecycle state of one account.
 `claimUrl` is `null` once the account has been claimed or expired.
 
 **Errors:** `401` · `404` not found (including soft-deleted accounts)
+
+### `GET /accounts/:id/events`
+
+Fetch the append-only lifecycle audit trail for one account. Uses the same
+authentication and visibility rules as `GET /accounts/:id`; unknown and
+soft-deleted accounts return `404`.
+
+**Response `200`** - `AccountEventResponseDto[]`, oldest first.
+
+```json
+[
+  {
+    "id": "3c9d8f7e-1b2a-4c5d-8e9f-0a1b2c3d4e5f",
+    "accountId": "8f14e45f-ceea-467f-a8ba-1a2b3c4d5e6f",
+    "type": "created",
+    "txHash": null,
+    "details": { "amount": "25.0000000", "assetCode": "USDC" },
+    "createdAt": "2026-11-09T12:00:00.000Z"
+  }
+]
+```
+
+Event types are `created`, `contract_deployed`, `funded`, `claim_started`,
+`claimed`, `claim_failed`, `partial_sweep`, `expired`, and `failed`.
+`details` is sanitized before persistence: secrets, claim tokens, raw
+destinations, and IP addresses are redacted.
 
 ### `GET /accounts`
 

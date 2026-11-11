@@ -22,6 +22,7 @@ import { AccountResponseDto } from './dto/account-response.dto.js';
 import { AccountsListResponseDto } from './dto/accounts-list-response.dto.js';
 import { AccountStatus } from './enums/account-status.enum.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
+import { AccountEventResponseDto } from '../account-events/dto/account-event-response.dto.js';
 
 @ApiTags('accounts')
 @ApiBearerAuth()
@@ -80,6 +81,31 @@ export class AccountsController {
   })
   public async findOne(@Param('id') id: string): Promise<AccountResponseDto> {
     return this.accountsService.findOne(id);
+  }
+
+  @Get(':id/events')
+  @ApiOperation({
+    summary: 'Get an account lifecycle audit trail',
+    description:
+      'Returns append-only lifecycle events for an ephemeral account, oldest first. ' +
+      'The endpoint uses the same authentication and visibility rules as GET /accounts/:id.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Account events retrieved successfully',
+    type: [AccountEventResponseDto],
+  })
+  @ApiResponse({ status: 401, description: 'Authentication required' })
+  @ApiResponse({ status: 404, description: 'Account not found' })
+  @ApiResponse({
+    status: 429,
+    description:
+      'Rate limit exceeded — requests are throttled to protect funding flows',
+  })
+  public async findEvents(
+    @Param('id') id: string,
+  ): Promise<AccountEventResponseDto[]> {
+    return this.accountsService.findEvents(id);
   }
 
   @Get()

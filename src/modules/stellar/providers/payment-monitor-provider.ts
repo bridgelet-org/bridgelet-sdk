@@ -12,6 +12,7 @@ import {
   paymentMatchesAsset,
 } from '../../../common/utils/stellar-asset.util.js';
 import { PaymentMonitorHealthProvider } from '../../../common/metrics/payment-monitor-health.provider.js';
+import { AccountEventsProvider } from '../../account-events/providers/account-events.provider.js';
 
 /**
  * PaymentMonitorProvider - Horizon SSE-based payment detection
@@ -75,6 +76,7 @@ export class PaymentMonitorProvider implements OnModuleDestroy {
     private readonly stellarService: StellarService,
     private readonly configService: ConfigService,
     private readonly paymentMonitorHealth: PaymentMonitorHealthProvider,
+    private readonly accountEventsProvider: AccountEventsProvider,
   ) {
     const horizonUrl =
       this.configService.getOrThrow<string>('stellar.horizonUrl');
@@ -277,7 +279,7 @@ export class PaymentMonitorProvider implements OnModuleDestroy {
             `Stopping monitor.`,
         );
         this.unwatch(account.id);
-        await this.markAccountFailed(account.id);
+        await this.markAccountFailed(account.id, msg);
         return;
       }
 
@@ -290,11 +292,18 @@ export class PaymentMonitorProvider implements OnModuleDestroy {
     }
 
     // recordPayment() succeeded — update DB status and stop watching
-    await this.markAccountPendingClaim(account.id);
+    await this.markAccountPendingClaim(
+      account,
+      record.transaction_hash ?? null,
+    );
     this.unwatch(account.id);
   }
 
-  private async markAccountPendingClaim(accountId: string): Promise<void> {
+  private async markAccountPendingClaim(
+    account: Account,
+    txHash: string | null,
+  ): Promise<void> {
+    const accountId = account.id;
     // #445: the write is now *conditional* on the source status, matching
     // `PaymentMonitorService.processPayment()` in the sibling module. This was
     // previously unconditional, which created a real self-transition: the SSE
@@ -318,7 +327,7 @@ export class PaymentMonitorProvider implements OnModuleDestroy {
       { status: AccountStatus.PENDING_CLAIM },
     );
 
-    if (result.affected === 0) {
+    if (result.affected !== 1) {
       this.logger.debug(
         `Account ${accountId} was no longer PENDING_PAYMENT; ` +
           `PENDING_CLAIM write skipped (already advanced by the poller or another stream event)`,
@@ -326,10 +335,23 @@ export class PaymentMonitorProvider implements OnModuleDestroy {
       return;
     }
 
+    await this.accountEventsProvider.record({
+      accountId,
+      type: 'funded',
+      txHash,
+      details: {
+        amount: account.amount,
+        assetCode: this.eventAssetCode(account.asset),
+      },
+    });
+
     this.logger.log(`Account ${accountId} status → PENDING_CLAIM`);
   }
 
-  private async markAccountFailed(accountId: string): Promise<void> {
+  private async markAccountFailed(
+    accountId: string,
+    reason: string,
+  ): Promise<void> {
     // #445: reached only from the non-retryable contract errors
     // TooManyPayments / InvalidAmount, on an account this stream has been
     // watching — i.e. PENDING_PAYMENT. Conditional for the same reason as
@@ -346,14 +368,25 @@ export class PaymentMonitorProvider implements OnModuleDestroy {
       { status: AccountStatus.FAILED },
     );
 
-    if (result.affected === 0) {
+    if (result.affected !== 1) {
       this.logger.warn(
         `Account ${accountId} was no longer PENDING_PAYMENT; FAILED write skipped`,
       );
       return;
     }
 
+    await this.accountEventsProvider.record({
+      accountId,
+      type: 'failed',
+      details: { reason, phase: 'payment_recording' },
+    });
+
     this.logger.warn(`Account ${accountId} status → FAILED`);
+  }
+
+  private eventAssetCode(asset: string): string {
+    const [code] = asset.split(':');
+    return code === 'native' ? 'XLM' : code;
   }
 
   /**
