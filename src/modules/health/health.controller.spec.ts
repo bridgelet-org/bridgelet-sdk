@@ -1,11 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getDataSourceToken } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 import { HealthController } from './health.controller.js';
+import { PaymentMonitorHealthProvider } from '../../common/metrics/payment-monitor-health.provider.js';
 
 /** Shared factory: creates a NestJS test module with a mocked DataSource. */
 async function buildModule(
   dataSourceMock: Partial<DataSource>,
+  monitorLagSeconds = 0,
 ): Promise<TestingModule> {
   return Test.createTestingModule({
     controllers: [HealthController],
@@ -13,6 +16,24 @@ async function buildModule(
       {
         provide: getDataSourceToken(),
         useValue: dataSourceMock,
+      },
+      {
+        provide: ConfigService,
+        useValue: {
+          getOrThrow: jest.fn((key: string) => {
+            if (key === 'app.paymentMonitorLagThresholdMs') return 300000;
+            throw new Error(`Config key not found: ${key}`);
+          }),
+        },
+      },
+      {
+        provide: PaymentMonitorHealthProvider,
+        useValue: {
+          refreshGauge: jest.fn(() => monitorLagSeconds),
+          getLastProcessedEventAt: jest.fn(
+            () => new Date(Date.now() - monitorLagSeconds * 1_000),
+          ),
+        },
       },
     ],
   }).compile();
@@ -100,6 +121,40 @@ describe('HealthController', () => {
   // ──────────────────────────────────────────────────────────────────────────
   // Degraded path: generic database error (connection refused, etc.)
   // ──────────────────────────────────────────────────────────────────────────
+  describe('payment monitor lag', () => {
+    it('reports healthy when lag is within the configured threshold', async () => {
+      const module = await buildModule(
+        { query: jest.fn().mockResolvedValue([{ ok: 1 }]) },
+        120,
+      );
+      const controller = module.get(HealthController);
+
+      const result = await controller.check();
+
+      expect(result.status).toBe('ok');
+      expect(result.services.paymentMonitor).toEqual(
+        expect.objectContaining({
+          healthy: true,
+          secondsSinceLastEvent: 120,
+          thresholdMs: 300000,
+        }),
+      );
+    });
+
+    it('reports degraded when lag exceeds the configured threshold', async () => {
+      const module = await buildModule(
+        { query: jest.fn().mockResolvedValue([{ ok: 1 }]) },
+        301,
+      );
+      const controller = module.get(HealthController);
+
+      const result = await controller.check();
+
+      expect(result.status).toBe('degraded');
+      expect(result.services.paymentMonitor.healthy).toBe(false);
+    });
+  });
+
   describe('when the database throws a generic error', () => {
     let controller: HealthController;
 

@@ -15,6 +15,14 @@ export default registerAs('app', () => ({
     process.env.PAYMENT_POLL_INTERVAL_MS ?? '30000',
     10,
   ),
+  paymentMonitorLagThresholdMs: parseInt(
+    process.env.PAYMENT_MONITOR_LAG_THRESHOLD_MS ?? '300000',
+    10,
+  ),
+  stuckAccountThresholdMs: parseInt(
+    process.env.STUCK_ACCOUNT_THRESHOLD_MS ?? '600000',
+    10,
+  ),
   expiryCheckIntervalMs: parseInt(
     process.env.EXPIRY_CHECK_INTERVAL_MS ?? '300000',
     10,

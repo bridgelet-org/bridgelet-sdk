@@ -10,13 +10,14 @@ The request body delivered to your endpoint is always
 `{ "event": "<name>", ...payload }` — the event name is repeated as the
 `event` field, and also sent as the `X-Bridgelet-Event` header.
 
-| Event             | Emitted by                               | Meaning                                                                   |
-| ----------------- | ---------------------------------------- | ------------------------------------------------------------------------- |
-| `account.created` | `AccountsService.create()`               | An ephemeral account was created and funded.                              |
-| `account.expired` | `SchedulerService.handleExpiredClaims()` | An account passed its expiry and was swept to the recovery address.       |
-| `sweep.completed` | `ClaimRedemptionProvider.redeemClaim()`  | A claim was redeemed and funds were swept.                                |
-| `sweep.partial`   | `ClaimRedemptionProvider.redeemClaim()`  | The contract authorised the sweep but the Horizon payment did not settle. |
-| `sweep.failed`    | `ClaimRedemptionProvider.redeemClaim()`  | A redemption attempt failed.                                              |
+| Event             | Emitted by                                | Meaning                                                                           |
+| ----------------- | ----------------------------------------- | --------------------------------------------------------------------------------- |
+| `account.created` | `AccountsService.create()`                | An ephemeral account was created and funded.                                      |
+| `account.expired` | `SchedulerService.handleExpiredClaims()`  | An account passed its expiry and was swept to the recovery address.               |
+| `account.stuck`   | `SchedulerService.runStuckAccountCheck()` | An account stayed in `CLAIMING` or `PARTIAL_SWEEP` past the configured threshold. |
+| `sweep.completed` | `ClaimRedemptionProvider.redeemClaim()`   | A claim was redeemed and funds were swept.                                        |
+| `sweep.partial`   | `ClaimRedemptionProvider.redeemClaim()`   | The contract authorised the sweep but the Horizon payment did not settle.         |
+| `sweep.failed`    | `ClaimRedemptionProvider.redeemClaim()`   | A redemption attempt failed.                                                      |
 
 ### `account.created`
 
@@ -64,6 +65,40 @@ Emitted by the expiry sweep. Funds have been recovered to the account's
 | `accountId` | string   | Internal account UUID.                  |
 | `publicKey` | string   | Stellar address of the expired account. |
 | `expiredAt` | ISO 8601 | When the transition happened.           |
+
+### `account.stuck`
+
+Emitted once when an account has been in `CLAIMING` or `PARTIAL_SWEEP` longer
+than `STUCK_ACCOUNT_THRESHOLD_MS` (default 10 minutes). It is not re-emitted on
+every scheduler pass; it fires again only if the account leaves that status and
+later becomes stuck again.
+
+```json
+{
+  "event": "account.stuck",
+  "accountId": "550e8400-e29b-41d4-a716-446655440000",
+  "publicKey": "GABCD1234EFGH5678IJKL9012MNOP3456QRST7890UVWX1234YZAB5678",
+  "status": "partial_sweep",
+  "stuckSince": "2026-03-26T10:00:00.000Z",
+  "ageSeconds": 900,
+  "thresholdMs": 600000,
+  "detectedAt": "2026-03-26T10:15:00.000Z"
+}
+```
+
+| Field         | Type     | Notes                                           |
+| ------------- | -------- | ----------------------------------------------- |
+| `accountId`   | string   | Internal account UUID.                          |
+| `publicKey`   | string   | Stellar address of the affected account.        |
+| `status`      | string   | `claiming` or `partial_sweep`.                  |
+| `stuckSince`  | ISO 8601 | Last status update time (`accounts.updatedAt`). |
+| `ageSeconds`  | number   | Seconds spent in the status at detection time.  |
+| `thresholdMs` | number   | Configured threshold that triggered the event.  |
+| `detectedAt`  | ISO 8601 | When the scheduler detected the stuck account.  |
+
+For `partial_sweep`, the original claim token can be retried. For `claiming`,
+inspect the sweep logs and on-chain state before intervening; the claim lock may
+still be active.
 
 ### `sweep.completed`
 

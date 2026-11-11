@@ -29,6 +29,22 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
     errors.push('DATABASE_PORT must be a number');
   }
 
+  for (const key of [
+    'PAYMENT_POLL_INTERVAL_MS',
+    'PAYMENT_MONITOR_LAG_THRESHOLD_MS',
+    'STUCK_ACCOUNT_THRESHOLD_MS',
+    'EXPIRY_CHECK_INTERVAL_MS',
+    'INITIALIZING_CLEANUP_INTERVAL_MS',
+    'INITIALIZING_TIMEOUT_MS',
+  ]) {
+    const raw = env[key];
+    if (raw === undefined || raw.trim() === '') continue;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) {
+      errors.push(`${key} must be a positive number`);
+    }
+  }
+
   if (env.ENCRYPTION_KEY && !/^[0-9a-f]{64}$/i.test(env.ENCRYPTION_KEY)) {
     errors.push('ENCRYPTION_KEY must be a 64-character hex string');
   }

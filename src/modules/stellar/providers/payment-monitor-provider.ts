@@ -11,6 +11,7 @@ import {
   parseAmountToStroops,
   paymentMatchesAsset,
 } from '../../../common/utils/stellar-asset.util.js';
+import { PaymentMonitorHealthProvider } from '../../../common/metrics/payment-monitor-health.provider.js';
 
 /**
  * PaymentMonitorProvider - Horizon SSE-based payment detection
@@ -73,6 +74,7 @@ export class PaymentMonitorProvider implements OnModuleDestroy {
     private readonly accountsRepository: Repository<Account>,
     private readonly stellarService: StellarService,
     private readonly configService: ConfigService,
+    private readonly paymentMonitorHealth: PaymentMonitorHealthProvider,
   ) {
     const horizonUrl =
       this.configService.getOrThrow<string>('stellar.horizonUrl');
@@ -102,6 +104,7 @@ export class PaymentMonitorProvider implements OnModuleDestroy {
       .cursor('now') // only react to new payments, not historical ones
       .stream({
         onmessage: (record) => {
+          this.paymentMonitorHealth.recordProcessedEvent();
           if ((record.type as string) !== 'payment') return;
           void this.handlePaymentEvent(
             account,
@@ -117,6 +120,7 @@ export class PaymentMonitorProvider implements OnModuleDestroy {
           });
         },
         onerror: (err) => {
+          this.paymentMonitorHealth.recordStreamRestart();
           const errMsg =
             err instanceof Error ? err.message : JSON.stringify(err);
           this.logger.error(

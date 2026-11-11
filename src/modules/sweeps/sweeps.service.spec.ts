@@ -70,6 +70,7 @@ describe('SweepsService', () => {
     getSweepNonce: jest.Mock<() => Promise<any>>;
   };
   let configMock: { getOrThrow: jest.Mock };
+  let failureByCodeCounter: { inc: jest.Mock };
 
   beforeEach(async () => {
     validationProvider = {
@@ -107,6 +108,8 @@ describe('SweepsService', () => {
       }),
     };
 
+    failureByCodeCounter = { inc: jest.fn() };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SweepsService,
@@ -123,6 +126,10 @@ describe('SweepsService', () => {
         {
           provide: getToken('sweep_failure_total'),
           useValue: { inc: jest.fn() },
+        },
+        {
+          provide: getToken('sweep_failure_by_code_total'),
+          useValue: failureByCodeCounter,
         },
         {
           provide: Registry,
@@ -343,6 +350,9 @@ describe('SweepsService', () => {
       expect(
         transactionProvider.executeSweepTransaction,
       ).not.toHaveBeenCalled();
+      expect(failureByCodeCounter.inc).toHaveBeenCalledWith({
+        error_code: 'SWEEP_CONTRACT_FAILED',
+      });
     });
 
     it('maps a submitted-then-rejected execute_sweep transaction whose error carries a contract marker to SWEEP_CONTRACT_FAILED', async () => {
@@ -376,6 +386,9 @@ describe('SweepsService', () => {
       await expect(service.executeSweep(validRequest)).rejects.toThrow(
         'execute_sweep failed',
       );
+      expect(failureByCodeCounter.inc).toHaveBeenCalledWith({
+        error_code: 'TX_BAD_SEQ',
+      });
     });
 
     // Regression: prior behaviour propagated Horizon payment errors.
@@ -410,6 +423,9 @@ describe('SweepsService', () => {
       expect(result.destination).toBe(validRequest.destinationAddress);
       expect(result.txHash).toBeUndefined();
       expect(result.timestamp).toBeUndefined();
+      expect(failureByCodeCounter.inc).toHaveBeenCalledWith({
+        error_code: 'UNKNOWN_SWEEP_ERROR',
+      });
 
       // The log line is now PARTIAL (not CRITICAL) to distinguish recoverable
       // vs fatal in monitoring.

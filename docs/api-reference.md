@@ -429,8 +429,35 @@ verification example.
 
 ## Health
 
-`GET /health` — unauthenticated liveness/readiness probe. `200` when the
-service is up.
+`GET /health` - unauthenticated liveness/readiness probe. Always returns `200`
+with a JSON body; `status` is `"ok"` or `"degraded"`.
+
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-03-26T10:15:00.000Z",
+  "services": {
+    "database": {
+      "healthy": true,
+      "poolExhausted": false
+    },
+    "paymentMonitor": {
+      "healthy": true,
+      "lastProcessedAt": "2026-03-26T10:14:55.000Z",
+      "secondsSinceLastEvent": 5,
+      "thresholdMs": 300000
+    },
+    "stellar": "ok",
+    "soroban": "ok"
+  }
+}
+```
+
+`status` becomes `"degraded"` if the database pool is unhealthy or the payment
+monitor has not processed a Horizon event within
+`PAYMENT_MONITOR_LAG_THRESHOLD_MS` (default 5 minutes). See
+[Monitoring and Alerts](./monitoring-and-alerts.md) for the Prometheus metrics
+and alert rules.
 
 ## Rate limits
 

@@ -7,6 +7,8 @@ import { AccountStatus } from '../accounts/enums/account-status.enum.js';
 import { SchedulerService } from './scheduler.service.js';
 import { StellarService } from '../stellar/stellar.service.js';
 import { WebhooksService } from '../webhooks/webhooks.service.js';
+import { AccountMetricsProvider } from '../../common/metrics/account-metrics.provider.js';
+import { getToken } from '@willsoto/nestjs-prometheus';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -48,6 +50,13 @@ describe('SchedulerService', () => {
     find: jest.MockedFunction<() => Promise<Account[]>>;
     update: jest.MockedFunction<() => Promise<any>>;
   };
+  let webhooksService: {
+    triggerEvent: jest.MockedFunction<WebhooksService['triggerEvent']>;
+  };
+  let accountMetrics: {
+    refresh: jest.MockedFunction<AccountMetricsProvider['refresh']>;
+  };
+  let expiryFailuresCounter: { inc: jest.Mock };
 
   beforeEach(async () => {
     accountsRepo = {
@@ -68,17 +77,24 @@ describe('SchedulerService', () => {
           'app.expiryCheckIntervalMs': '300000',
           'app.initializingCleanupIntervalMs': '900000',
           'app.initializingTimeoutMs': '600000',
+          'app.stuckAccountThresholdMs': '600000',
         };
         if (!(key in map)) throw new Error(`Config key not found: ${key}`);
         return map[key];
       }),
     };
 
-    const webhooksMock = {
+    webhooksService = {
       triggerEvent: jest
         .fn<WebhooksService['triggerEvent']>()
         .mockResolvedValue(undefined),
     };
+    accountMetrics = {
+      refresh: jest
+        .fn<AccountMetricsProvider['refresh']>()
+        .mockResolvedValue(undefined),
+    };
+    expiryFailuresCounter = { inc: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -86,7 +102,12 @@ describe('SchedulerService', () => {
         { provide: getRepositoryToken(Account), useValue: accountsRepo },
         { provide: StellarService, useValue: stellarMock },
         { provide: ConfigService, useValue: configMock },
-        { provide: WebhooksService, useValue: webhooksMock },
+        { provide: WebhooksService, useValue: webhooksService },
+        { provide: AccountMetricsProvider, useValue: accountMetrics },
+        {
+          provide: getToken('expiry_job_failures_total'),
+          useValue: expiryFailuresCounter,
+        },
       ],
     }).compile();
 
@@ -354,6 +375,63 @@ describe('SchedulerService', () => {
 
       await expect(service.runInitializingCleanup()).resolves.not.toThrow();
       expect(accountsRepo.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Stuck-account webhook (#993)
+  // -------------------------------------------------------------------------
+
+  describe('runStuckAccountCheck()', () => {
+    it('refreshes account gauges and emits account.stuck once per stuck episode', async () => {
+      const stuckAccount = makeAccount({
+        id: 'stuck-1',
+        status: AccountStatus.PARTIAL_SWEEP,
+        updatedAt: new Date(Date.now() - 700_000),
+      });
+      accountsRepo.find
+        .mockResolvedValueOnce([stuckAccount])
+        .mockResolvedValueOnce([stuckAccount]);
+
+      await service.runStuckAccountCheck();
+      await service.runStuckAccountCheck();
+
+      expect(accountMetrics.refresh).toHaveBeenCalledTimes(2);
+      expect(webhooksService.triggerEvent).toHaveBeenCalledTimes(1);
+      expect(webhooksService.triggerEvent).toHaveBeenCalledWith(
+        'account.stuck',
+        expect.objectContaining({
+          accountId: 'stuck-1',
+          status: AccountStatus.PARTIAL_SWEEP,
+          thresholdMs: 600000,
+          ageSeconds: expect.any(Number),
+        }),
+      );
+    });
+
+    it('allows a new notification after the account leaves the stuck set', async () => {
+      const stuckAccount = makeAccount({
+        id: 'stuck-2',
+        status: AccountStatus.CLAIMING,
+        updatedAt: new Date(Date.now() - 700_000),
+      });
+      accountsRepo.find
+        .mockResolvedValueOnce([stuckAccount])
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([stuckAccount]);
+
+      await service.runStuckAccountCheck();
+      await service.runStuckAccountCheck();
+      await service.runStuckAccountCheck();
+
+      expect(webhooksService.triggerEvent).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not throw when the stuck-account query fails', async () => {
+      accountsRepo.find.mockRejectedValueOnce(new Error('DB down'));
+
+      await expect(service.runStuckAccountCheck()).resolves.not.toThrow();
+      expect(webhooksService.triggerEvent).not.toHaveBeenCalled();
     });
   });
 

@@ -13,12 +13,16 @@ import { AccountStatus } from '../accounts/enums/account-status.enum.js';
 import { assertValidAccountStatusTransition } from '../accounts/enums/account-status-transition.util.js';
 import { WebhooksService } from '../webhooks/webhooks.service.js';
 import { IntervalJobRunner } from '../../common/utils/interval-job-runner.js';
+import { AccountMetricsProvider } from '../../common/metrics/account-metrics.provider.js';
+import { InjectMetric } from '@willsoto/nestjs-prometheus';
+import { Counter } from 'prom-client';
 
 @Injectable()
 export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SchedulerService.name);
   private expiryRunner: IntervalJobRunner | null = null;
   private initializingRunner: IntervalJobRunner | null = null;
+  private readonly notifiedStuckAccounts = new Set<string>();
 
   constructor(
     @InjectRepository(Account)
@@ -26,6 +30,9 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     private readonly stellarService: StellarService,
     private readonly configService: ConfigService,
     private readonly webhooksService: WebhooksService,
+    private readonly accountMetrics: AccountMetricsProvider,
+    @InjectMetric('expiry_job_failures_total')
+    private readonly expiryJobFailuresCounter: Counter<string>,
   ) {}
 
   onModuleInit(): void {
@@ -40,7 +47,10 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
 
     this.expiryRunner = this.createRunner(
       expiryIntervalMs,
-      () => this.runExpiryJob(),
+      async () => {
+        await this.runExpiryJob();
+        await this.runStuckAccountCheck();
+      },
       'Expiry job',
     );
     this.initializingRunner = this.createRunner(
@@ -98,6 +108,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
         ],
       });
     } catch (err: unknown) {
+      this.expiryJobFailuresCounter.inc();
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`Expiry job DB query failed: ${msg}`);
       return;
@@ -114,6 +125,76 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /**
+   * Emits `account.stuck` once per account/status episode when an account has
+   * remained in CLAIMING or PARTIAL_SWEEP past `app.stuckAccountThresholdMs`.
+   *
+   * The in-memory notified set is pruned against the current stuck set on each
+   * pass, so an account that leaves the status (or changes between the two)
+   * can notify again if it later gets stuck anew.
+   */
+  async runStuckAccountCheck(): Promise<void> {
+    await this.accountMetrics.refresh();
+
+    const thresholdMs = Number(
+      this.configService.getOrThrow<number>('app.stuckAccountThresholdMs'),
+    );
+    const cutoff = new Date(Date.now() - thresholdMs);
+    const stuckStatuses = [AccountStatus.CLAIMING, AccountStatus.PARTIAL_SWEEP];
+
+    let accounts: Account[];
+    try {
+      accounts = await this.accountsRepository.find({
+        where: stuckStatuses.map((status) => ({
+          status,
+          updatedAt: LessThan(cutoff),
+        })),
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Stuck-account check DB query failed: ${msg}`);
+      return;
+    }
+
+    const currentKeys = new Set<string>();
+
+    await Promise.allSettled(
+      accounts.map(async (account) => {
+        if (!stuckStatuses.includes(account.status)) return;
+
+        const key = `${account.id}:${account.status}`;
+        currentKeys.add(key);
+        if (this.notifiedStuckAccounts.has(key)) return;
+
+        const ageSeconds = Math.max(
+          0,
+          Math.floor((Date.now() - account.updatedAt.getTime()) / 1_000),
+        );
+
+        await this.webhooksService.triggerEvent('account.stuck', {
+          accountId: account.id,
+          publicKey: account.publicKey,
+          status: account.status,
+          stuckSince: account.updatedAt.toISOString(),
+          ageSeconds,
+          thresholdMs,
+          detectedAt: new Date().toISOString(),
+        });
+        this.notifiedStuckAccounts.add(key);
+        this.logger.warn(
+          `Account ${account.id} has been ${account.status} for ${ageSeconds}s ` +
+            `(threshold: ${thresholdMs}ms)`,
+        );
+      }),
+    );
+
+    for (const key of this.notifiedStuckAccounts) {
+      if (!currentKeys.has(key)) {
+        this.notifiedStuckAccounts.delete(key);
+      }
+    }
+  }
+
   private async expireAccount(account: Account): Promise<void> {
     const contractId = account.contractId;
     const signerSecret = this.configService.getOrThrow<string>(
@@ -121,6 +202,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     );
 
     if (!contractId) {
+      this.expiryJobFailuresCounter.inc();
       this.logger.error(
         `expireAccount() skipped for account ${account.id}: contractId is null`,
       );
@@ -130,6 +212,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.stellarService.expireAccount({ contractId, signerSecret });
     } catch (err: unknown) {
+      this.expiryJobFailuresCounter.inc();
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(
         `expireAccount() failed for account ${account.id} (${account.publicKey}): ${msg}`,

@@ -12,6 +12,7 @@ import { Counter } from 'prom-client';
 import { SweepMetricsProvider } from './providers/sweep-metrics.provider.js';
 import {
   isSorobanContractFailure,
+  mapContractError,
   throwSweepContractError,
 } from '../../common/errors/contract-error.mapper.js';
 
@@ -29,6 +30,8 @@ export class SweepsService {
     private readonly sweepSuccessCounter: Counter<string>,
     @InjectMetric('sweep_failure_total')
     private readonly sweepFailureCounter: Counter<string>,
+    @InjectMetric('sweep_failure_by_code_total')
+    private readonly sweepFailureByCodeCounter: Counter<string>,
     private readonly sweepMetrics: SweepMetricsProvider,
   ) {}
 
@@ -141,6 +144,7 @@ export class SweepsService {
         // ledger-level refusal (e.g. tx_bad_seq) carries none and stays
         // retryable below.
         const raw = error instanceof Error ? error.message : String(error);
+        this.recordSweepFailure(error);
         if (isSorobanContractFailure(raw)) {
           this.logger.error(
             `Soroban contract failure authorizing sweep for account ` +
@@ -187,7 +191,7 @@ export class SweepsService {
         });
       this.sweepSuccessCounter.inc();
     } catch (error) {
-      this.sweepFailureCounter.inc();
+      this.recordSweepFailure(error);
       const message = error instanceof Error ? error.message : String(error);
       const stack = error instanceof Error ? error.stack : undefined;
       this.logger.error(
@@ -218,6 +222,34 @@ export class SweepsService {
       destination: sweepExecutionRequest.destinationAddress,
       timestamp: transactionResult.timestamp,
     };
+  }
+
+  private recordSweepFailure(error: unknown): void {
+    this.sweepFailureCounter.inc();
+    this.sweepFailureByCodeCounter.inc({
+      error_code: this.classifySweepFailure(error),
+    });
+  }
+
+  private classifySweepFailure(error: unknown): string {
+    const raw = error instanceof Error ? error.message : String(error);
+    const mappedCode = mapContractError(raw).errorCode;
+    if (mappedCode !== 'UNKNOWN_CONTRACT_ERROR') {
+      return mappedCode;
+    }
+
+    const transactionCode = raw.match(/\btx_[a-z0-9_]+\b/i)?.[0];
+    if (transactionCode) {
+      return transactionCode.toUpperCase();
+    }
+
+    if (isSorobanContractFailure(raw)) {
+      return 'SWEEP_CONTRACT_FAILED';
+    }
+    if (/timed?\s*out|timeout/i.test(raw)) {
+      return 'HORIZON_TIMEOUT';
+    }
+    return 'UNKNOWN_SWEEP_ERROR';
   }
 
   /**

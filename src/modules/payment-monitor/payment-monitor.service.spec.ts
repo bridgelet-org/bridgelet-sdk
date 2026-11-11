@@ -6,6 +6,7 @@ import { Account } from '../accounts/entities/account.entity.js';
 import { AccountStatus } from '../accounts/enums/account-status.enum.js';
 import { PaymentMonitorService } from './payment-monitor.service.js';
 import { StellarService } from '../stellar/stellar.service.js';
+import { PaymentMonitorHealthProvider } from '../../common/metrics/payment-monitor-health.provider.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -91,6 +92,10 @@ describe('PaymentMonitorService', () => {
     find: jest.MockedFunction<() => Promise<Account[]>>;
     update: jest.MockedFunction<() => Promise<any>>;
   };
+  let paymentMonitorHealth: {
+    refreshGauge: jest.Mock;
+    recordProcessedEvent: jest.Mock;
+  };
 
   beforeEach(async () => {
     jest.useFakeTimers();
@@ -124,12 +129,21 @@ describe('PaymentMonitorService', () => {
       }),
     };
 
+    paymentMonitorHealth = {
+      refreshGauge: jest.fn(() => 0),
+      recordProcessedEvent: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentMonitorService,
         { provide: getRepositoryToken(Account), useValue: accountsRepo },
         { provide: StellarService, useValue: stellarMock },
         { provide: ConfigService, useValue: configMock },
+        {
+          provide: PaymentMonitorHealthProvider,
+          useValue: paymentMonitorHealth,
+        },
       ],
     }).compile();
 
@@ -555,6 +569,9 @@ describe('PaymentMonitorService', () => {
 
       expect(mockPaymentsBuilder.forAccount).toHaveBeenCalledTimes(3);
       expect(stellarService.recordPayment).toHaveBeenCalledTimes(1);
+      expect(paymentMonitorHealth.recordProcessedEvent).toHaveBeenCalledTimes(
+        1,
+      );
       expect(accountsRepo.update).toHaveBeenCalledWith(
         { id: 'a1', status: AccountStatus.PENDING_PAYMENT },
         { status: AccountStatus.PENDING_CLAIM },
