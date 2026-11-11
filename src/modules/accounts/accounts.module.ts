@@ -10,6 +10,7 @@ import { PaymentMonitorProvider } from '../stellar/providers/payment-monitor-pro
 import { WebhooksModule } from '../webhooks/webhooks.module.js';
 import { makeCounterProvider } from '@willsoto/nestjs-prometheus';
 import { AccountLatencyMetricsProvider } from './providers/account-latency-metrics.provider.js';
+import { AccountEventsModule } from '../account-events/account-events.module.js';
 
 const accountCreationCounter = makeCounterProvider({
   name: 'account_creation_total',
@@ -31,6 +32,7 @@ const accountCreationCounter = makeCounterProvider({
     }),
     StellarModule,
     WebhooksModule,
+    AccountEventsModule,
   ],
   controllers: [AccountsController],
   providers: [

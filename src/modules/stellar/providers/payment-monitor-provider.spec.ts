@@ -2,6 +2,7 @@ import { jest } from '@jest/globals';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
+import { AccountEventsProvider } from '../../account-events/providers/account-events.provider.js';
 import { Account } from '../../../modules/accounts/entities/account.entity.js';
 import { PaymentMonitorProvider } from './payment-monitor-provider.js';
 import { StellarService } from '../stellar.service.js';
@@ -10,6 +11,10 @@ import { AccountStatus } from '../../accounts/enums/account-status.enum.js';
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const mockAccountEventsProvider = {
+  record: jest.fn().mockResolvedValue(undefined),
+};
 
 const makeAccount = (overrides: Partial<Account> = {}): Account =>
   ({
@@ -43,6 +48,7 @@ const makePaymentRecord = (overrides: Partial<any> = {}) => ({
   asset_type: 'credit_alphanum4',
   asset_code: 'USDC',
   asset_issuer: 'GBULQKZ7SA56UKRI6LX2IB6XH3GJW2L34BMTOWMQFJBAQNPSHJJNOTGN',
+  transaction_hash: 'c'.repeat(64),
   ...overrides,
 });
 
@@ -108,6 +114,7 @@ describe('PaymentMonitorProvider', () => {
   };
 
   beforeEach(async () => {
+    mockAccountEventsProvider.record.mockClear();
     capturedOnMessage = null;
     capturedOnError = null;
     mockCloseStream.mockReset();
@@ -143,6 +150,10 @@ describe('PaymentMonitorProvider', () => {
         { provide: getRepositoryToken(Account), useValue: accountsRepo },
         { provide: StellarService, useValue: stellarMock },
         { provide: ConfigService, useValue: configMock },
+        {
+          provide: AccountEventsProvider,
+          useValue: mockAccountEventsProvider,
+        },
       ],
     }).compile();
 
@@ -227,6 +238,12 @@ describe('PaymentMonitorProvider', () => {
         { id: 'acc-uuid-1', status: AccountStatus.PENDING_PAYMENT },
         { status: AccountStatus.PENDING_CLAIM },
       );
+      expect(mockAccountEventsProvider.record).toHaveBeenCalledWith({
+        accountId: 'acc-uuid-1',
+        type: 'funded',
+        txHash: 'c'.repeat(64),
+        details: { amount: '100', assetCode: 'USDC' },
+      });
     });
 
     // #445: the self-transition hazard that made the write conditional in the
@@ -239,7 +256,8 @@ describe('PaymentMonitorProvider', () => {
       await new Promise(setImmediate);
 
       expect(accountsRepo.update).toHaveBeenCalledTimes(1);
-      // Still closes the stream — the payment *was* recorded on-chain.
+      expect(mockAccountEventsProvider.record).not.toHaveBeenCalled();
+      // Still closes the stream �?" the payment *was* recorded on-chain.
       expect(mockCloseStream).toHaveBeenCalledTimes(1);
     });
 
@@ -403,6 +421,14 @@ describe('PaymentMonitorProvider', () => {
           { id: 'acc-uuid-1', status: AccountStatus.PENDING_PAYMENT },
           { status: AccountStatus.FAILED },
         );
+        expect(mockAccountEventsProvider.record).toHaveBeenCalledWith({
+          accountId: 'acc-uuid-1',
+          type: 'failed',
+          details: {
+            reason: expect.stringContaining(errMsg),
+            phase: 'payment_recording',
+          },
+        });
         expect(mockCloseStream).toHaveBeenCalledTimes(1);
       },
     );

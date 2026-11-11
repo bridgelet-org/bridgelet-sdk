@@ -26,6 +26,7 @@ import { StellarAddressValidator } from '../../../common/validators/stellar-addr
 import { WebhooksService } from '../../webhooks/webhooks.service.js';
 import { ClaimAuditProvider } from './claim-audit.provider.js';
 import { ValidationProvider } from '../../sweeps/providers/validation.provider.js';
+import { AccountEventsProvider } from '../../account-events/providers/account-events.provider.js';
 
 @Injectable()
 export class ClaimRedemptionProvider {
@@ -44,6 +45,7 @@ export class ClaimRedemptionProvider {
     private webhooksService: WebhooksService,
     private claimAuditProvider: ClaimAuditProvider,
     private kmsKeyProvider: KmsKeyProvider,
+    private accountEventsProvider: AccountEventsProvider,
   ) {}
 
   async redeemClaim(
@@ -161,6 +163,12 @@ export class ClaimRedemptionProvider {
         locked.status = AccountStatus.CLAIMING;
         locked.destinationAddress = destinationAddress;
         await manager.save(locked);
+        await this.accountEventsProvider.record({
+          accountId: locked.id,
+          type: 'claim_started',
+          details: { partialRetry: wasPartial },
+          manager,
+        });
         return { locked, wasPartialOnEntry: wasPartial };
       });
 
@@ -227,6 +235,17 @@ export class ClaimRedemptionProvider {
           destinationAddress: '',
         });
 
+        await this.accountEventsProvider.record({
+          accountId: account.id,
+          type: 'partial_sweep',
+          details: {
+            amount: account.amount,
+            assetCode: this.eventAssetCode(account.asset),
+            reason: sweepResult.error ?? 'unknown',
+            contractAuthHash: sweepResult.contractAuthHash,
+          },
+        });
+
         await this.claimAuditProvider.record({
           accountId: account.id,
           destination: destinationAddress,
@@ -282,7 +301,21 @@ export class ClaimRedemptionProvider {
             asset: account.asset,
             claimedAt: account.claimedAt,
           });
-          return manager.save(newClaim);
+          const savedClaim = await manager.save(newClaim);
+
+          await this.accountEventsProvider.record({
+            accountId: account.id,
+            type: 'claimed',
+            txHash: sweepResult.txHash,
+            details: {
+              amount: account.amount,
+              assetCode: this.eventAssetCode(account.asset),
+              claimId: savedClaim.id,
+            },
+            manager,
+          });
+
+          return savedClaim;
         },
       );
 
@@ -348,6 +381,15 @@ export class ClaimRedemptionProvider {
         typedError.stack,
       );
 
+      await this.accountEventsProvider.record({
+        accountId: account.id,
+        type: 'claim_failed',
+        details: {
+          reason: typedError.message,
+          revertedTo: revertStatus,
+        },
+      });
+
       await this.claimAuditProvider.record({
         accountId: account.id,
         destination: destinationAddress,
@@ -367,6 +409,11 @@ export class ClaimRedemptionProvider {
 
       throw error;
     }
+  }
+
+  private eventAssetCode(asset: string): string {
+    const [code] = asset.split(':');
+    return code === 'native' ? 'XLM' : code;
   }
 
   private hashToken(token: string): string {

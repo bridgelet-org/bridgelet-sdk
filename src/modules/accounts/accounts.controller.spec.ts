@@ -12,6 +12,7 @@ const VALID_KEY = 'G' + 'A'.repeat(55);
 const mockAccountsService = {
   create: jest.fn(),
   findOne: jest.fn(),
+  findEvents: jest.fn(),
   findAll: jest.fn(),
 };
 
@@ -75,6 +76,27 @@ describe('AccountsController', () => {
       const result = await controller.findOne('uuid-1');
 
       expect(mockAccountsService.findOne).toHaveBeenCalledWith('uuid-1');
+      expect(result).toBe(response);
+    });
+  });
+
+  describe('findEvents', () => {
+    it('delegates to accountsService.findEvents with the given id', async () => {
+      const response = [
+        {
+          id: 'event-1',
+          accountId: 'uuid-1',
+          type: 'created',
+          txHash: null,
+          details: {},
+          createdAt: new Date('2026-01-01'),
+        },
+      ];
+      mockAccountsService.findEvents.mockResolvedValue(response);
+
+      const result = await controller.findEvents('uuid-1');
+
+      expect(mockAccountsService.findEvents).toHaveBeenCalledWith('uuid-1');
       expect(result).toBe(response);
     });
   });

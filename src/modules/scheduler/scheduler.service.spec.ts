@@ -7,6 +7,7 @@ import { AccountStatus } from '../accounts/enums/account-status.enum.js';
 import { SchedulerService } from './scheduler.service.js';
 import { StellarService } from '../stellar/stellar.service.js';
 import { WebhooksService } from '../webhooks/webhooks.service.js';
+import { AccountEventsProvider } from '../account-events/providers/account-events.provider.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -39,6 +40,10 @@ const makeAccount = (overrides: Partial<Account> = {}): Account =>
 // Tests
 // ---------------------------------------------------------------------------
 
+const mockAccountEventsProvider = {
+  record: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('SchedulerService', () => {
   let service: SchedulerService;
   let stellarService: {
@@ -50,6 +55,7 @@ describe('SchedulerService', () => {
   };
 
   beforeEach(async () => {
+    mockAccountEventsProvider.record.mockClear();
     accountsRepo = {
       find: jest.fn<() => Promise<Account[]>>().mockResolvedValue([]),
       update: jest.fn<() => Promise<any>>().mockResolvedValue({ affected: 1 }),
@@ -87,6 +93,10 @@ describe('SchedulerService', () => {
         { provide: StellarService, useValue: stellarMock },
         { provide: ConfigService, useValue: configMock },
         { provide: WebhooksService, useValue: webhooksMock },
+        {
+          provide: AccountEventsProvider,
+          useValue: mockAccountEventsProvider,
+        },
       ],
     }).compile();
 
@@ -145,6 +155,11 @@ describe('SchedulerService', () => {
       expect(accountsRepo.update).toHaveBeenCalledWith(account.id, {
         status: AccountStatus.EXPIRED,
         expiredAt: expect.any(Date),
+      });
+      expect(mockAccountEventsProvider.record).toHaveBeenCalledWith({
+        accountId: account.id,
+        type: 'expired',
+        details: { expiredAt: expect.any(String) },
       });
     });
 
@@ -290,6 +305,14 @@ describe('SchedulerService', () => {
           existingKey: 'value',
           failureReason: 'initialization_timeout',
           detectedAt: expect.any(String),
+        },
+      });
+      expect(mockAccountEventsProvider.record).toHaveBeenCalledWith({
+        accountId: account.id,
+        type: 'failed',
+        details: {
+          reason: 'initialization_timeout',
+          phase: 'initialization',
         },
       });
     });

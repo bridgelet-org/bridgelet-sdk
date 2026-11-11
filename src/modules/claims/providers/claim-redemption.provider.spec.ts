@@ -13,6 +13,7 @@ import { WebhooksService } from '../../webhooks/webhooks.service.js';
 import { ClaimAuditProvider } from './claim-audit.provider.js';
 import { KmsKeyProvider } from '../../../common/crypto/kms-key.provider.js';
 import { ValidationProvider } from '../../sweeps/providers/validation.provider.js';
+import { AccountEventsProvider } from '../../account-events/providers/account-events.provider.js';
 
 describe('ClaimRedemptionProvider', () => {
   let provider: ClaimRedemptionProvider;
@@ -39,6 +40,10 @@ describe('ClaimRedemptionProvider', () => {
 
   const mockWebhooksService = {
     triggerEvent: jest.fn(),
+  };
+
+  const mockAccountEventsProvider = {
+    record: jest.fn().mockResolvedValue(undefined),
   };
 
   const VALID_DESTINATION =
@@ -158,6 +163,10 @@ describe('ClaimRedemptionProvider', () => {
             getEncryptionKey: jest.fn().mockReturnValue('a'.repeat(64)),
           },
         },
+        {
+          provide: AccountEventsProvider,
+          useValue: mockAccountEventsProvider,
+        },
       ],
     }).compile();
 
@@ -218,6 +227,11 @@ describe('ClaimRedemptionProvider', () => {
         destination: VALID_DESTINATION,
         sweptAt: expect.any(Date),
       });
+
+      const types = mockAccountEventsProvider.record.mock.calls.map(
+        ([event]) => event.type,
+      );
+      expect(types).toEqual(['claim_started', 'claimed']);
     });
 
     it('should acquire SELECT FOR UPDATE lock before setting status to CLAIMING', async () => {

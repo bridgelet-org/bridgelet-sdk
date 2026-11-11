@@ -9,6 +9,7 @@ The current schema is created entirely through the migrations in `src/database/m
 - `webhooks`: stores outbound webhook subscriptions.
 - `webhook_deliveries`: stores per-delivery webhook attempts, including the subscribed webhook reference (`subscription_id`), event type, payload hash, retry count, last response details, delivery timestamp, and creation timestamp. It references `webhooks.id` with `ON DELETE CASCADE` and has a composite index on (`subscription_id`, `created_at`).
 - `contract_events`: stores indexed Soroban contract events, including event type, contract address, ledger sequence, transaction hash, event payload, and creation timestamp.
+- `account_events`: append-only account lifecycle audit log, including event type, optional transaction hash, sanitized JSON details, and creation timestamp. It intentionally has no foreign key to `accounts` so audit rows survive account deletion and cannot be cascaded away.
 
 ## Account Status Enum
 
@@ -191,6 +192,22 @@ comment, next to the `CREATE INDEX` statements themselves.
 | Index name             | Columns     | Query served                              |
 | ---------------------- | ----------- | ----------------------------------------- |
 | `IDX_claims_accountId` | `accountId` | FK lookup when joining claims to accounts |
+
+### account_events
+
+| Index name                               | Columns                  | Query served                                  |
+| ---------------------------------------- | ------------------------ | --------------------------------------------- |
+| `IDX_account_events_accountId_createdAt` | `accountId`, `createdAt` | `GET /accounts/:id/events`, oldest-first scan |
+
+Added by migration `1718100010000-CreateAccountEventsTable`. Rows are written
+by `AccountEventsProvider` and exposed only through the account-events
+endpoint. The table is append-only: no update or delete path exists. `details`
+is sanitized before insertion, so secrets, claim tokens, raw destinations, and
+IP addresses are never persisted.
+
+The audit log is intentionally unbounded for now. Retention is 12 months; a
+purge job (or scheduled archival) is follow-up work before the table becomes a
+storage problem.
 
 ### webhooks
 

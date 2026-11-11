@@ -140,6 +140,8 @@ cp .env.example .env
 #   1718100008000-AddDeletedAtToAccountsTable      (soft-delete column + index on accounts)
 #   1718100008000-AddPartialSweepToAccountStatus   (adds PARTIAL_SWEEP to account_status enum)
 #   1718100008000-CreateClaimAuditLogTable         (claim attempt audit log table)
+#   1718100009000-AddContractEventIndexes          (contract event lookup indexes)
+#   1718100010000-CreateAccountEventsTable         (append-only account lifecycle audit log)
 npm run migration:run
 
 # Start development server
@@ -277,6 +279,7 @@ Once running, access API docs at:
 
 POST /accounts # Create ephemeral account (also returns the claim token)
 GET /accounts/:id # Get account details
+GET /accounts/:id/events # Get the account lifecycle audit trail
 GET /accounts # List accounts (admin, paginated)
 POST /claims/verify # Check a claim token is still valid
 POST /claims/redeem # Redeem claim and sweep funds
