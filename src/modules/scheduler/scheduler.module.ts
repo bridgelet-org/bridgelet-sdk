@@ -4,7 +4,13 @@ import { Account } from '../accounts/entities/account.entity.js';
 import { StellarModule } from '../stellar/stellar.module.js';
 import { SchedulerService } from './scheduler.service.js';
 import { WebhooksModule } from '../webhooks/webhooks.module.js';
+import { makeCounterProvider } from '@willsoto/nestjs-prometheus';
 import { AccountEventsModule } from '../account-events/account-events.module.js';
+
+const expiryJobFailuresCounter = makeCounterProvider({
+  name: 'expiry_job_failures_total',
+  help: 'Total number of expiry job failures',
+});
 
 @Module({
   imports: [
@@ -13,6 +19,6 @@ import { AccountEventsModule } from '../account-events/account-events.module.js'
     WebhooksModule,
     AccountEventsModule,
   ],
-  providers: [SchedulerService],
+  providers: [SchedulerService, expiryJobFailuresCounter],
 })
 export class SchedulerModule {}

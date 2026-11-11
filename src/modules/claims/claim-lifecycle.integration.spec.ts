@@ -224,6 +224,10 @@ describe('Claim redemption lifecycle (integration) [issue #820]', () => {
           provide: getToken('sweep_failure_total'),
           useValue: { inc: jest.fn() },
         },
+        {
+          provide: getToken('sweep_failure_by_code_total'),
+          useValue: { inc: jest.fn() },
+        },
         // Stubbed DB.
         {
           provide: getRepositoryToken(Claim),

@@ -23,6 +23,7 @@ export class CreateWebhookDto {
       'sweep.failed',
       'account.created',
       'account.expired',
+      'account.stuck',
     ],
     description: 'Event types to subscribe to',
   })

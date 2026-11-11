@@ -17,6 +17,11 @@ const sweepFailureCounter = makeCounterProvider({
   name: 'sweep_failure_total',
   help: 'Total number of failed sweeps',
 });
+const sweepFailureByCodeCounter = makeCounterProvider({
+  name: 'sweep_failure_by_code_total',
+  help: 'Total number of failed sweeps by stable error code',
+  labelNames: ['error_code'],
+});
 
 /**
  * #650: every provider below is registered with Nest's default scope, i.e.
@@ -44,6 +49,7 @@ const sweepFailureCounter = makeCounterProvider({
     SweepMetricsProvider,
     sweepSuccessCounter,
     sweepFailureCounter,
+    sweepFailureByCodeCounter,
   ],
   exports: [SweepsService],
 })

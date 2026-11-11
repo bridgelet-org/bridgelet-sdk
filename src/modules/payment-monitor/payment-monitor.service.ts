@@ -13,6 +13,7 @@ import { Account } from '../accounts/entities/account.entity.js';
 import { AccountStatus } from '../accounts/enums/account-status.enum.js';
 import { assertValidAccountStatusTransition } from '../accounts/enums/account-status-transition.util.js';
 import { IntervalJobRunner } from '../../common/utils/interval-job-runner.js';
+import { PaymentMonitorHealthProvider } from '../../common/metrics/payment-monitor-health.provider.js';
 import {
   parseAmountToStroops,
   paymentMatchesAsset,
@@ -71,6 +72,7 @@ export class PaymentMonitorService implements OnModuleInit, OnModuleDestroy {
     private readonly accountsRepository: Repository<Account>,
     private readonly stellarService: StellarService,
     private readonly configService: ConfigService,
+    private readonly paymentMonitorHealth: PaymentMonitorHealthProvider,
     private readonly accountEventsProvider: AccountEventsProvider,
   ) {
     const horizonUrl =
@@ -112,6 +114,8 @@ export class PaymentMonitorService implements OnModuleInit, OnModuleDestroy {
    * not stop the tick.
    */
   async pollAllAccounts(): Promise<void> {
+    this.paymentMonitorHealth.refreshGauge();
+
     const now = new Date();
     const accounts = await this.accountsRepository.find({
       where: {
@@ -127,6 +131,8 @@ export class PaymentMonitorService implements OnModuleInit, OnModuleDestroy {
     await Promise.allSettled(
       accounts.map((account) => this.pollAccount(account)),
     );
+
+    this.paymentMonitorHealth.refreshGauge();
   }
 
   private async pollAccount(account: Account): Promise<void> {
@@ -140,6 +146,7 @@ export class PaymentMonitorService implements OnModuleInit, OnModuleDestroy {
       );
 
       await this.processPayment(account, payment);
+      this.paymentMonitorHealth.recordProcessedEvent();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(

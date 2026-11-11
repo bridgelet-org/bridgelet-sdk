@@ -1,7 +1,9 @@
 import { Controller, Get, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { InjectDataSource } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
+import { PaymentMonitorHealthProvider } from '../../common/metrics/payment-monitor-health.provider.js';
 
 /**
  * Maximum milliseconds to wait for a pool connection before reporting the
@@ -18,23 +20,52 @@ const DB_HEALTH_TIMEOUT_MS = 3_000;
 @ApiTags('health')
 @Controller('health')
 export class HealthController {
-  constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+  constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly configService: ConfigService,
+    private readonly paymentMonitorHealth: PaymentMonitorHealthProvider,
+  ) {}
 
   @Get()
   @HttpCode(200)
-  @ApiOperation({ summary: 'Health check – includes database pool status' })
+  @ApiOperation({
+    summary: 'Health check - includes database pool and payment monitor status',
+  })
   @ApiResponse({ status: 200, description: 'Service is healthy' })
   @ApiResponse({ status: 503, description: 'Service is unhealthy' })
   async check() {
     const dbStatus = await this.checkDatabasePool();
+    const monitorStatus = this.checkPaymentMonitor();
     return {
-      status: dbStatus.healthy ? 'ok' : 'degraded',
+      status: dbStatus.healthy && monitorStatus.healthy ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),
       services: {
         database: dbStatus,
+        paymentMonitor: monitorStatus,
         stellar: 'ok',
         soroban: 'ok',
       },
+    };
+  }
+
+  private checkPaymentMonitor(): {
+    healthy: boolean;
+    lastProcessedAt: string;
+    secondsSinceLastEvent: number;
+    thresholdMs: number;
+  } {
+    const secondsSinceLastEvent = this.paymentMonitorHealth.refreshGauge();
+    const thresholdMs = Number(
+      this.configService.getOrThrow<number>('app.paymentMonitorLagThresholdMs'),
+    );
+
+    return {
+      healthy: secondsSinceLastEvent * 1_000 <= thresholdMs,
+      lastProcessedAt: this.paymentMonitorHealth
+        .getLastProcessedEventAt()
+        .toISOString(),
+      secondsSinceLastEvent,
+      thresholdMs,
     };
   }
 

@@ -7,6 +7,7 @@ import { Account } from '../../../modules/accounts/entities/account.entity.js';
 import { PaymentMonitorProvider } from './payment-monitor-provider.js';
 import { StellarService } from '../stellar.service.js';
 import { AccountStatus } from '../../accounts/enums/account-status.enum.js';
+import { PaymentMonitorHealthProvider } from '../../../common/metrics/payment-monitor-health.provider.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -112,6 +113,10 @@ describe('PaymentMonitorProvider', () => {
   let configMock: {
     getOrThrow: jest.Mock<(key: string) => string | undefined>;
   };
+  let paymentMonitorHealth: {
+    recordProcessedEvent: jest.Mock;
+    recordStreamRestart: jest.Mock;
+  };
 
   beforeEach(async () => {
     mockAccountEventsProvider.record.mockClear();
@@ -144,12 +149,21 @@ describe('PaymentMonitorProvider', () => {
       getOrThrow: jest.fn((key: string) => configMap[key]),
     };
 
+    paymentMonitorHealth = {
+      recordProcessedEvent: jest.fn(),
+      recordStreamRestart: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PaymentMonitorProvider,
         { provide: getRepositoryToken(Account), useValue: accountsRepo },
         { provide: StellarService, useValue: stellarMock },
         { provide: ConfigService, useValue: configMock },
+        {
+          provide: PaymentMonitorHealthProvider,
+          useValue: paymentMonitorHealth,
+        },
         {
           provide: AccountEventsProvider,
           useValue: mockAccountEventsProvider,
@@ -217,6 +231,9 @@ describe('PaymentMonitorProvider', () => {
       capturedOnMessage!(makePaymentRecord());
       await Promise.resolve(); // flush microtasks
 
+      expect(paymentMonitorHealth.recordProcessedEvent).toHaveBeenCalledTimes(
+        1,
+      );
       expect(stellarService.recordPayment).toHaveBeenCalledWith(
         expect.objectContaining({
           contractId: 'CONTRACT123',
@@ -460,6 +477,7 @@ describe('PaymentMonitorProvider', () => {
       expect(() => capturedOnError!(new Error('network blip'))).not.toThrow();
       // Stream is still tracked
       expect(mockCloseStream).not.toHaveBeenCalled();
+      expect(paymentMonitorHealth.recordStreamRestart).toHaveBeenCalledTimes(1);
     });
   });
 
