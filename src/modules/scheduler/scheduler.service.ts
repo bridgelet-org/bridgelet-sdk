@@ -13,6 +13,7 @@ import { AccountStatus } from '../accounts/enums/account-status.enum.js';
 import { assertValidAccountStatusTransition } from '../accounts/enums/account-status-transition.util.js';
 import { WebhooksService } from '../webhooks/webhooks.service.js';
 import { IntervalJobRunner } from '../../common/utils/interval-job-runner.js';
+import { AccountEventsProvider } from '../account-events/providers/account-events.provider.js';
 
 @Injectable()
 export class SchedulerService implements OnModuleInit, OnModuleDestroy {
@@ -26,6 +27,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     private readonly stellarService: StellarService,
     private readonly configService: ConfigService,
     private readonly webhooksService: WebhooksService,
+    private readonly accountEventsProvider: AccountEventsProvider,
   ) {}
 
   onModuleInit(): void {
@@ -154,6 +156,13 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       status: AccountStatus.EXPIRED,
       expiredAt,
     });
+
+    await this.accountEventsProvider.record({
+      accountId: account.id,
+      type: 'expired',
+      details: { expiredAt: expiredAt.toISOString() },
+    });
+
     this.logger.log(`Account ${account.id} status → EXPIRED`);
 
     await this.webhooksService.triggerEvent('account.expired', {
@@ -223,6 +232,16 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
         status: AccountStatus.FAILED,
         metadata,
       });
+
+      await this.accountEventsProvider.record({
+        accountId: account.id,
+        type: 'failed',
+        details: {
+          reason: 'initialization_timeout',
+          phase: 'initialization',
+        },
+      });
+
       this.logger.warn(
         `Account ${account.id} status → FAILED (initialization_timeout)`,
       );

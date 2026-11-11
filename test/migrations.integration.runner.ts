@@ -9,6 +9,7 @@ import { Account } from '../src/modules/accounts/entities/account.entity.js';
 import { Claim } from '../src/modules/claims/entities/claim.entity.js';
 import { ClaimAuditLog } from '../src/modules/claims/entities/claim-audit-log.entity.js';
 import { ContractEvent } from '../src/modules/stellar/entities/contract-event.entity.js';
+import { AccountEvent } from '../src/modules/account-events/entities/account-event.entity.js';
 import { WebhookDelivery } from '../src/modules/webhooks/entities/webhook-delivery.entity.js';
 import { Webhook } from '../src/modules/webhooks/entities/webhook.entity.js';
 import { CreateAccountsTable1718100000000 } from '../src/database/migrations/1718100000000-CreateAccountsTable.js';
@@ -23,6 +24,7 @@ import { AddDeletedAtToAccountsTable1718100008000 } from '../src/database/migrat
 import { CreateClaimAuditLogTable1718100008000 } from '../src/database/migrations/1718100008000-CreateClaimAuditLogTable.js';
 import { AddPartialSweepToAccountStatus1718100008000 } from '../src/database/migrations/1718100008000-AddPartialSweepToAccountStatus.js';
 import { AddContractEventIndexes1718100009000 } from '../src/database/migrations/1718100009000-AddContractEventIndexes.js';
+import { CreateAccountEventsTable1718100010000 } from '../src/database/migrations/1718100010000-CreateAccountEventsTable.js';
 
 const postgresUser = 'postgres';
 const postgresPassword = 'postgres';
@@ -54,6 +56,7 @@ const migrations = [
   AddPartialSweepToAccountStatus1718100008000,
   CreateClaimAuditLogTable1718100008000,
   AddContractEventIndexes1718100009000,
+  CreateAccountEventsTable1718100010000,
 ];
 
 // Issue #723: pinned execution order. `migrations` above is the input order;
@@ -79,6 +82,7 @@ const pinnedMigrationOrder = [
   'AddPartialSweepToAccountStatus1718100008000',
   'CreateClaimAuditLogTable1718100008000',
   'AddContractEventIndexes1718100009000',
+  'CreateAccountEventsTable1718100010000',
 ];
 
 const highTrafficIndexNames = [
@@ -206,6 +210,7 @@ async function main(): Promise<void> {
         Webhook,
         WebhookDelivery,
         ContractEvent,
+        AccountEvent,
       ],
       migrations,
       migrationsTransactionMode: 'each',
