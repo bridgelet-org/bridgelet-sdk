@@ -51,6 +51,6 @@ const sweepFailureByCodeCounter = makeCounterProvider({
     sweepFailureCounter,
     sweepFailureByCodeCounter,
   ],
-  exports: [SweepsService],
+  exports: [SweepsService, TransactionProvider],
 })
 export class SweepsModule {}

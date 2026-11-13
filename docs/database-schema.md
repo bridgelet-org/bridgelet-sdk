@@ -83,6 +83,47 @@ State transitions driven by `AccountsService`, `ClaimRedemptionProvider`,
 - `CLAIMING` → `PENDING_CLAIM` / `PARTIAL_SWEEP` (rollback): an unrecoverable
   sweep error. The account stays retryable; it is **not** promoted to `FAILED`.
 
+### Terminal Account Reclamation (#994)
+
+`CLAIMED` and `EXPIRED` are terminal lifecycle states, but the ephemeral
+Stellar account still exists until its reserve is reclaimed. A background job
+(`AccountReclamationProvider`, run by `SchedulerService` every
+`RECLAMATION_CHECK_INTERVAL_MS`) performs that cleanup without changing the
+account's lifecycle status or the already-returned claim result.
+
+`accounts` carries the cleanup state separately from `status`:
+
+| Column                     | Meaning                                                       |
+| -------------------------- | ------------------------------------------------------------- |
+| `reclamationStatus`        | `pending` -> `refunded` -> `trustline_removed` -> `completed` |
+| `reclamationAttempts`      | Number of cleanup attempts, used for exponential backoff      |
+| `reclamationLastAttemptAt` | When the most recent attempt started                          |
+| `reclamationNextAttemptAt` | Earliest next retry; `NULL` means immediately eligible        |
+| `reclamationLastError`     | Last error, truncated; cleared on a successful phase          |
+| `reclamationCompletedAt`   | When cleanup finished and `secretKeyEncrypted` was cleared    |
+
+The flow is state-checked against Horizon, not just the phase column, so a
+crash between submitting a transaction and persisting the phase resumes
+correctly:
+
+- `CLAIMED`: remove the asset trustline if one exists (it must be empty), then
+  `AccountMerge` into the platform funding account. The reserve goes to the
+  funding account.
+- `EXPIRED`: for issued assets, pay the full trustline balance to the
+  contract's `recovery_address`, remove the trustline, then merge. For native
+  accounts, merge directly. The expired account's remaining XLM reserve follows
+  the recovery address, matching `bridgelet-core`'s `expire()` accounting.
+- After a successful merge, `secretKeyEncrypted` is set to `NULL` and a
+  `reclaimed` account event records the transaction hashes.
+- If Horizon reports the account is already gone, cleanup resumes at the finish
+  line, clears the secret, and records the event.
+- Failures leave the lifecycle status untouched and set
+  `reclamationNextAttemptAt` using exponential backoff capped at one hour.
+
+The new index `IDX_accounts_reclamation` on
+(`status`, `reclamationStatus`, `reclamationNextAttemptAt`) serves the
+scheduler query that finds due terminal accounts.
+
 #### Corrections to the previous version of this section (#445)
 
 Building the table from the actual writes rather than from the diagram above

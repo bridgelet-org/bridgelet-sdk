@@ -36,6 +36,7 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
     'EXPIRY_CHECK_INTERVAL_MS',
     'INITIALIZING_CLEANUP_INTERVAL_MS',
     'INITIALIZING_TIMEOUT_MS',
+    'RECLAMATION_CHECK_INTERVAL_MS',
   ]) {
     const raw = env[key];
     if (raw === undefined || raw.trim() === '') continue;

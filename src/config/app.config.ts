@@ -35,6 +35,10 @@ export default registerAs('app', () => ({
     process.env.INITIALIZING_TIMEOUT_MS ?? '600000',
     10,
   ),
+  reclamationCheckIntervalMs: parseInt(
+    process.env.RECLAMATION_CHECK_INTERVAL_MS ?? '60000',
+    10,
+  ),
   kmsEnabled: process.env.KMS_ENABLED !== 'false',
   kmsKeyId: process.env.KMS_KEY_ID,
   awsRegion: process.env.AWS_REGION ?? 'us-east-1',

@@ -18,6 +18,7 @@ export class AccountEventResponseDto {
       'claim_failed',
       'partial_sweep',
       'expired',
+      'reclaimed',
       'failed',
     ],
   })

@@ -17,12 +17,14 @@ import { AccountMetricsProvider } from '../../common/metrics/account-metrics.pro
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter } from 'prom-client';
 import { AccountEventsProvider } from '../account-events/providers/account-events.provider.js';
+import { AccountReclamationProvider } from './providers/account-reclamation.provider.js';
 
 @Injectable()
 export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SchedulerService.name);
   private expiryRunner: IntervalJobRunner | null = null;
   private initializingRunner: IntervalJobRunner | null = null;
+  private reclamationRunner: IntervalJobRunner | null = null;
   private readonly notifiedStuckAccounts = new Set<string>();
 
   constructor(
@@ -35,6 +37,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     @InjectMetric('expiry_job_failures_total')
     private readonly expiryJobFailuresCounter: Counter<string>,
     private readonly accountEventsProvider: AccountEventsProvider,
+    private readonly accountReclamationProvider: AccountReclamationProvider,
   ) {}
 
   onModuleInit(): void {
@@ -45,6 +48,9 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       this.configService.getOrThrow<number>(
         'app.initializingCleanupIntervalMs',
       ),
+    );
+    const reclamationIntervalMs = Number(
+      this.configService.getOrThrow<number>('app.reclamationCheckIntervalMs'),
     );
 
     this.expiryRunner = this.createRunner(
@@ -60,20 +66,31 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       () => this.runInitializingCleanup(),
       'INITIALIZING cleanup',
     );
+    this.reclamationRunner = this.createRunner(
+      reclamationIntervalMs,
+      () => this.accountReclamationProvider.runPending(),
+      'Account reclamation',
+    );
     this.expiryRunner.start();
     this.initializingRunner.start();
+    this.reclamationRunner.start();
 
     this.logger.log(`Expiry job started (interval: ${expiryIntervalMs}ms)`);
     this.logger.log(
       `INITIALIZING cleanup started (interval: ${initializingIntervalMs}ms)`,
+    );
+    this.logger.log(
+      `Account reclamation started (interval: ${reclamationIntervalMs}ms)`,
     );
   }
 
   onModuleDestroy(): void {
     this.expiryRunner?.stop();
     this.initializingRunner?.stop();
+    this.reclamationRunner?.stop();
     this.expiryRunner = null;
     this.initializingRunner = null;
+    this.reclamationRunner = null;
     this.logger.log('Scheduler jobs stopped');
   }
 

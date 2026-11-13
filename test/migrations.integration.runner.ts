@@ -25,6 +25,7 @@ import { CreateClaimAuditLogTable1718100008000 } from '../src/database/migration
 import { AddPartialSweepToAccountStatus1718100008000 } from '../src/database/migrations/1718100008000-AddPartialSweepToAccountStatus.js';
 import { AddContractEventIndexes1718100009000 } from '../src/database/migrations/1718100009000-AddContractEventIndexes.js';
 import { CreateAccountEventsTable1718100010000 } from '../src/database/migrations/1718100010000-CreateAccountEventsTable.js';
+import { AddAccountReclamation1718100011000 } from '../src/database/migrations/1718100011000-AddAccountReclamation.js';
 
 const postgresUser = 'postgres';
 const postgresPassword = 'postgres';
@@ -57,6 +58,7 @@ const migrations = [
   CreateClaimAuditLogTable1718100008000,
   AddContractEventIndexes1718100009000,
   CreateAccountEventsTable1718100010000,
+  AddAccountReclamation1718100011000,
 ];
 
 // Issue #723: pinned execution order. `migrations` above is the input order;
@@ -83,6 +85,7 @@ const pinnedMigrationOrder = [
   'CreateClaimAuditLogTable1718100008000',
   'AddContractEventIndexes1718100009000',
   'CreateAccountEventsTable1718100010000',
+  'AddAccountReclamation1718100011000',
 ];
 
 const highTrafficIndexNames = [

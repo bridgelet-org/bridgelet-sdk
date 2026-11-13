@@ -110,6 +110,13 @@ const mockAccountMergeOperation = jest.fn<
   type: 'accountMerge',
   ...params,
 }));
+const mockChangeTrustOperation = jest.fn<
+  MockOperation,
+  [{ asset: MockAsset; limit: string }]
+>((params) => ({
+  type: 'changeTrust',
+  ...params,
+}));
 
 const mockKeypair: MockKeypair = {
   publicKey: jest
@@ -172,6 +179,12 @@ function getMockAccountMergeOperation(
   return mockAccountMergeOperation(...args);
 }
 
+function getMockChangeTrustOperation(
+  ...args: [{ asset: MockAsset; limit: string }]
+): MockOperation {
+  return mockChangeTrustOperation(...args);
+}
+
 function getMockAsset(...args: [string, string]): MockAsset {
   return mockAssetConstructor(...args);
 }
@@ -198,6 +211,7 @@ jest.mock('@stellar/stellar-sdk', () => {
     Operation: {
       payment: getMockPaymentOperation,
       accountMerge: getMockAccountMergeOperation,
+      changeTrust: getMockChangeTrustOperation,
     },
     Asset: getMockAsset,
     BASE_FEE: 100,
@@ -1346,6 +1360,152 @@ describe('TransactionProvider', () => {
           'USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA6!',
         ),
       ).toThrow();
+    });
+  });
+
+  describe('getAccountSnapshot', () => {
+    const issuer = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+
+    it('returns native and trustline balances', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [
+          { asset_type: 'native', balance: '2.0000000' },
+          {
+            asset_type: 'credit_alphanum4',
+            asset_code: 'USDC',
+            asset_issuer: issuer,
+            balance: '7.5000000',
+          },
+        ],
+      });
+
+      await expect(
+        provider.getAccountSnapshot(
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        ),
+      ).resolves.toEqual({
+        publicKey: 'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        nativeBalance: '2.0000000',
+        trustlines: [
+          {
+            asset: `USDC:${issuer}`,
+            code: 'USDC',
+            issuer,
+            balance: '7.5000000',
+          },
+        ],
+      });
+    });
+
+    it('returns null when Horizon reports the account is gone', async () => {
+      const error = new Error('Resource Missing') as Error & {
+        response: { status: number };
+      };
+      error.response = { status: 404 };
+      mockLoadAccount.mockRejectedValue(error);
+
+      await expect(
+        provider.getAccountSnapshot(
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        ),
+      ).resolves.toBeNull();
+      expect(loggerErrorSpy).not.toHaveBeenCalled();
+    });
+
+    it('re-throws and logs non-404 Horizon failures', async () => {
+      mockLoadAccount.mockRejectedValue(new Error('Horizon unavailable'));
+
+      await expect(
+        provider.getAccountSnapshot(
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        ),
+      ).rejects.toThrow('Horizon unavailable');
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Failed to get account snapshot: Horizon unavailable',
+        expect.anything(),
+      );
+    });
+
+    it('throws when the native balance entry is missing', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+
+      await expect(
+        provider.getAccountSnapshot(
+          'GBBM6BKZPEHWYO3E3YKRETPKQ5MRNWSKA722GHBMZABXD4F2J33665ON',
+        ),
+      ).rejects.toThrow('has no native balance entry');
+    });
+  });
+
+  describe('removeTrustline', () => {
+    const issuer = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+    const params = {
+      ephemeralSecret: 'S_VALID_SECRET',
+      asset: `USDC:${issuer}`,
+    };
+
+    it('submits a changeTrust operation with a zero limit', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'trustline-hash',
+        ledger: 102,
+        successful: true,
+      });
+
+      const result = await provider.removeTrustline(params);
+
+      expect(mockChangeTrustOperation).toHaveBeenCalledWith({
+        asset: expect.objectContaining({
+          getCode: expect.any(Function),
+          getIssuer: expect.any(Function),
+        }),
+        limit: '0',
+      });
+      expect(mockTransactionSign).toHaveBeenCalledWith(mockKeypair);
+      expect(result.hash).toBe('trustline-hash');
+    });
+
+    it('rejects native assets', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+
+      await expect(
+        provider.removeTrustline({
+          ephemeralSecret: 'S_VALID_SECRET',
+          asset: 'native',
+        }),
+      ).rejects.toThrow('Cannot remove the native asset trustline');
+      expect(mockSubmitTransaction).not.toHaveBeenCalled();
+    });
+
+    it('logs and re-throws Horizon failures', async () => {
+      mockLoadAccount.mockResolvedValue({
+        id: 'acc-123',
+        sequence: '1',
+        balances: [],
+      });
+      mockSubmitTransaction.mockRejectedValue(new Error('change trust failed'));
+
+      await expect(provider.removeTrustline(params)).rejects.toThrow(
+        'change trust failed',
+      );
+      expect(loggerErrorSpy).toHaveBeenCalledWith(
+        'Trustline removal failed: change trust failed',
+        expect.anything(),
+      );
     });
   });
 

@@ -4,14 +4,13 @@
  * into the destination with an `AccountMerge` operation, rather than moving
  * balances with a `Payment`.
  *
- * ## Which code path uses this (#647)
+ * ## Which code path uses this (#647, #994)
  *
- * As of this commit: **no production path**. `TransactionProvider.mergeAccount`
- * is implemented and tested but `SweepsService` never calls it - the live sweep
- * flow is payment-only (ValidationProvider -> ContractProvider ->
- * TransactionProvider.executeSweepTransaction). Treat the merge path as
- * available-but-unwired, and wire it explicitly rather than assuming a sweep
- * already reclaims the reserve.
+ * `SweepsService` is still payment-only. The merge path is used by the
+ * background `AccountReclamationProvider`, which runs after an account reaches
+ * CLAIMED or EXPIRED: it removes any trustline, then merges the ephemeral
+ * account so its reserve is not stranded. A normal sweep alone still does not
+ * reclaim the reserve.
  *
  * ## Coverage
  *

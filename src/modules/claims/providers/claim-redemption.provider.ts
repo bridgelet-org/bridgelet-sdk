@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ConflictException,
   UnauthorizedException,
+  InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
 import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
@@ -192,6 +193,12 @@ export class ClaimRedemptionProvider {
         sweptAt: existingClaim.claimedAt,
         message: 'Claim was already redeemed',
       };
+    }
+
+    if (!account.secretKeyEncrypted) {
+      throw new InternalServerErrorException(
+        'Claim account is missing its encrypted secret',
+      );
     }
 
     try {
