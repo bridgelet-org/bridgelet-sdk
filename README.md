@@ -142,6 +142,7 @@ cp .env.example .env
 #   1718100008000-CreateClaimAuditLogTable         (claim attempt audit log table)
 #   1718100009000-AddContractEventIndexes          (contract event lookup indexes)
 #   1718100010000-CreateAccountEventsTable         (append-only account lifecycle audit log)
+#   1718100011000-AddAccountReclamation            (terminal account cleanup columns + index)
 npm run migration:run
 
 # Start development server
@@ -259,6 +260,7 @@ CLAIM_TOKEN_EXPIRY=2592000  # 30 days
 PORT=3000
 NODE_ENV=development
 CLAIM_BASE_URL=http://localhost:3000  # base URL for claim links (`<base>/c/<token>`); production must set its own https URL
+RECLAMATION_CHECK_INTERVAL_MS=60000   # terminal-account cleanup interval (ms)
 ```
 
 > **Redeploying `SWEEP_CONTROLLER_CONTRACT_ID`.** Each ephemeral account is
@@ -293,6 +295,28 @@ Full request/response documentation: [API Reference](./docs/api-reference.md)
 
 > There is no `POST /claims/initiate` endpoint. The claim token is minted by
 > `POST /accounts` and returned once, in that response's `claimUrl`.
+
+## Account Reclamation
+
+Sweeping a claimed account or expiring an unclaimed account does not, by
+itself, delete the temporary Stellar account. The scheduler runs
+`AccountReclamationProvider` every `RECLAMATION_CHECK_INTERVAL_MS` (default
+60 seconds) to finish the job:
+
+- **Claimed accounts**: remove any trustline, merge the account into the
+  platform funding account, clear the stored secret, and record a `reclaimed`
+  event.
+- **Expired accounts**: pay issued-asset balances to the contract's
+  `recovery_address`, remove the trustline, merge the account back to the
+  recovery address, clear the secret, and record a `reclaimed` event. Native
+  XLM follows the same recovery address, including the reserve.
+
+Cleanup progress is tracked in the `reclamation*` columns so an interrupted
+run resumes without repeating completed on-chain work. Failures retry with
+exponential backoff and never change the account's lifecycle status or the
+result of an earlier claim. See
+[Database Schema](./docs/database-schema.md#terminal-account-reclamation-994)
+for the phase details.
 
 ## Database Schema
 

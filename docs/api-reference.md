@@ -156,7 +156,9 @@ soft-deleted accounts return `404`.
 ```
 
 Event types are `created`, `contract_deployed`, `funded`, `claim_started`,
-`claimed`, `claim_failed`, `partial_sweep`, `expired`, and `failed`.
+`claimed`, `claim_failed`, `partial_sweep`, `expired`, `reclaimed`, and
+`failed`. `reclaimed` is written once the terminal account's trustline is
+removed, its reserve is merged, and its encrypted secret is cleared.
 `details` is sanitized before persistence: secrets, claim tokens, raw
 destinations, and IP addresses are redacted.
 

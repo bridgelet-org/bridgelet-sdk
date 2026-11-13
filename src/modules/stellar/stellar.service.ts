@@ -573,14 +573,13 @@ export class StellarService {
   }
 
   /**
-   * Calls EphemeralAccount.expire() to close an unclaimed account after its
-   * expiry ledger has been reached, directing funds to the recovery address.
+   * Calls EphemeralAccount.expire() to mark an unclaimed account EXPIRED after
+   * its expiry ledger has been reached.
    *
    * Should be called by a scheduled job monitoring accounts whose expiresAt
-   * timestamp has passed. The scheduler is tracked separately (not in scope here).
-   *
-   * ⚠️ MVP Note: Fund recovery to recovery_address depends on token transfer
-   * implementation in the contract, which is not yet complete in bridgelet-core.
+   * timestamp has passed. Moving the classic-account balance and reserve to
+   * recovery_address is done afterwards by AccountReclamationProvider (#994),
+   * which reads the address from get_info().
    *
    * Contract error mapping:
    * - Error::NotExpired     → non-fatal race condition, ledger not yet reached

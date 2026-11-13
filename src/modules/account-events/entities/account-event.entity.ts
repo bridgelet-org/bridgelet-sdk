@@ -15,6 +15,7 @@ export type AccountEventType =
   | 'claim_failed'
   | 'partial_sweep'
   | 'expired'
+  | 'reclaimed'
   | 'failed';
 
 @Entity('account_events')

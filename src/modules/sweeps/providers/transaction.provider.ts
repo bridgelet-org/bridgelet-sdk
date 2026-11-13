@@ -16,6 +16,8 @@ import {
 import type { ExecuteTransactionParams } from '../interfaces/execute-transaction-params.interface.js';
 import type { TransactionResult } from '../interfaces/transaction-result.interface.js';
 import type { MergeAccountParams } from '../interfaces/merge-account-params.interface.js';
+import type { RemoveTrustlineParams } from '../interfaces/remove-trustline-params.interface.js';
+import type { StellarAccountSnapshot } from '../interfaces/stellar-account-snapshot.interface.js';
 
 /**
  * Fee-bump metadata Horizon returns on a submission.
@@ -34,6 +36,7 @@ interface FeeBumpSubmitFields {
 
 interface HorizonErrorResponse {
   response?: {
+    status?: number;
     data?: {
       extras?: unknown;
     };
@@ -248,6 +251,114 @@ export class TransactionProvider {
 
     const [code, issuer] = parts;
     return new Asset(code, issuer);
+  }
+
+  /**
+   * Read the full classic-account state needed by the reclamation job.
+   *
+   * Returns `null` when Horizon reports that the account no longer exists,
+   * which is how a run resumes after a crash that happened after AccountMerge
+   * was submitted but before the database was updated.
+   */
+  public async getAccountSnapshot(
+    publicKey: string,
+  ): Promise<StellarAccountSnapshot | null> {
+    try {
+      const account = await this.server.loadAccount(publicKey);
+      const nativeBalance = account.balances.find(
+        (balance) => balance.asset_type === 'native',
+      );
+
+      if (!nativeBalance) {
+        throw new Error(`Account ${publicKey} has no native balance entry`);
+      }
+
+      const trustlines = account.balances
+        .filter(
+          (balance) =>
+            balance.asset_type !== 'native' &&
+            'asset_code' in balance &&
+            'asset_issuer' in balance,
+        )
+        .map((balance) => ({
+          asset: `${balance.asset_code}:${balance.asset_issuer}`,
+          code: balance.asset_code,
+          issuer: balance.asset_issuer,
+          balance: balance.balance,
+        }));
+
+      return {
+        publicKey,
+        nativeBalance: nativeBalance.balance,
+        trustlines,
+      };
+    } catch (error) {
+      const typedError = error as HorizonErrorResponse;
+      if (typedError.response?.status === 404) {
+        return null;
+      }
+
+      this.logger.error(
+        `Failed to get account snapshot: ${typedError.message}`,
+        typedError.stack,
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Remove a non-native trustline before AccountMerge. Stellar rejects a merge
+   * while any trustline remains, even one with a zero balance.
+   */
+  public async removeTrustline(
+    params: RemoveTrustlineParams,
+  ): Promise<TransactionResult> {
+    this.logger.log(`Removing trustline for asset: ${params.asset}`);
+
+    try {
+      const sourceKeypair = Keypair.fromSecret(params.ephemeralSecret);
+      const sourceAccount = await this.server.loadAccount(
+        sourceKeypair.publicKey(),
+      );
+      const asset = this.parseAsset(params.asset);
+
+      if (asset.isNative()) {
+        throw new Error('Cannot remove the native asset trustline');
+      }
+
+      const transaction = new TransactionBuilder(sourceAccount, {
+        fee: BASE_FEE,
+        networkPassphrase: this.networkPassphrase,
+      })
+        .addOperation(
+          Operation.changeTrust({
+            asset,
+            limit: '0',
+          }),
+        )
+        .setTimeout(30)
+        .build();
+
+      transaction.sign(sourceKeypair);
+      const result = await this.server.submitTransaction(transaction);
+
+      this.logger.log(`Trustline removal successful: ${result.hash}`);
+
+      return {
+        hash: result.hash,
+        ledger: this.toLedgerNumber(result.ledger),
+        successful: result.successful,
+        timestamp: new Date(),
+        ...this.describeFeeBump(result),
+      };
+    } catch (error) {
+      const typedError = error as HorizonErrorResponse;
+      this.logger.error(
+        `Trustline removal failed: ${typedError.message}`,
+        typedError.stack,
+      );
+      throw error;
+    }
   }
 
   /**

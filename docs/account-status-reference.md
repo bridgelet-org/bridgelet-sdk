@@ -33,5 +33,11 @@ a sweep succeeds but the Horizon payment fails; a retry from `partial_sweep`
 re-enters `claiming` and skips re-authorizing the contract
 (`claim-redemption.provider.ts`).
 
+`claimed` and `expired` are terminal for the lifecycle status, but the
+underlying ephemeral Stellar account is cleaned up afterwards by the
+`AccountReclamationProvider`. That job tracks its own progress in
+`reclamationStatus` and never writes `status`; see
+[Database Schema](./database-schema.md#terminal-account-reclamation-994).
+
 **Keep this table in sync**: any migration that adds a new
 `account_status_enum` value must update this file in the same PR.

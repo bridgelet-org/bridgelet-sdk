@@ -7,6 +7,7 @@ import {
   DeleteDateColumn,
   Index,
 } from 'typeorm';
+import { AccountReclamationStatus } from '../enums/account-reclamation-status.enum.js';
 import { AccountStatus } from '../enums/account-status.enum.js';
 
 /**
@@ -22,6 +23,11 @@ import { AccountStatus } from '../enums/account-status.enum.js';
  */
 @Index('IDX_accounts_status_expiresAt', ['status', 'expiresAt'])
 @Index('IDX_accounts_status_createdAt', ['status', 'createdAt'])
+@Index('IDX_accounts_reclamation', [
+  'status',
+  'reclamationStatus',
+  'reclamationNextAttemptAt',
+])
 @Index('IDX_accounts_createdAt', ['createdAt'])
 @Index('IDX_accounts_deletedAt', ['deletedAt'])
 @Entity('accounts')
@@ -37,8 +43,8 @@ export class Account {
   @Index('IDX_accounts_contractId')
   contractId: string | null;
 
-  @Column({ type: 'text' })
-  secretKeyEncrypted: string;
+  @Column({ type: 'text', nullable: true })
+  secretKeyEncrypted: string | null;
 
   @Column({ type: 'varchar', length: 56 })
   fundingSource: string;
@@ -92,6 +98,29 @@ export class Account {
   // transitions and their terminal-state rules.
   @Column({ type: 'timestamp', nullable: true })
   expiredAt: Date | null; // Actual time expiry was processed - set by the expiry handler, null until then
+
+  @Column({
+    type: 'enum',
+    enum: AccountReclamationStatus,
+    enumName: 'account_reclamation_status_enum',
+    default: AccountReclamationStatus.PENDING,
+  })
+  reclamationStatus: AccountReclamationStatus;
+
+  @Column({ type: 'int', default: 0 })
+  reclamationAttempts: number;
+
+  @Column({ type: 'timestamp', nullable: true })
+  reclamationLastAttemptAt: Date | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  reclamationNextAttemptAt: Date | null;
+
+  @Column({ type: 'text', nullable: true })
+  reclamationLastError: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  reclamationCompletedAt: Date | null;
 
   /**
    * #728: stored as `jsonb`. Metadata is bounded integration context that is
