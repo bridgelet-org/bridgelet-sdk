@@ -11,10 +11,15 @@ export const MXLLV_1007_SECRET_PATTERN = /^[A-Za-z0-9_-]+$/;
  * create/update DTOs. Secrets are used for outbound HMAC signing and must not be
  * weak or malformed.
  */
-export function mxllv1007ValidateWebhookSecret(secret: string): Mxllv1007SecretValidation {
-  if (secret.length < MXLLV_1007_SECRET_MIN_LENGTH) return { ok: false, reason: 'too_short' };
-  if (secret.length > MXLLV_1007_SECRET_MAX_LENGTH) return { ok: false, reason: 'too_long' };
-  if (!MXLLV_1007_SECRET_PATTERN.test(secret)) return { ok: false, reason: 'invalid_chars' };
+export function mxllv1007ValidateWebhookSecret(
+  secret: string,
+): Mxllv1007SecretValidation {
+  if (secret.length < MXLLV_1007_SECRET_MIN_LENGTH)
+    return { ok: false, reason: 'too_short' };
+  if (secret.length > MXLLV_1007_SECRET_MAX_LENGTH)
+    return { ok: false, reason: 'too_long' };
+  if (!MXLLV_1007_SECRET_PATTERN.test(secret))
+    return { ok: false, reason: 'invalid_chars' };
   return { ok: true };
 }
 

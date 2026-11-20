@@ -35,7 +35,9 @@ export function mxllv1009ApplyWebhookUpdate<T extends Record<string, unknown>>(
   return next;
 }
 
-export function mxllv1009IgnoresMutableFields(patch: Mxllv1009UpdateWebhookInput): string[] {
+export function mxllv1009IgnoresMutableFields(
+  patch: Mxllv1009UpdateWebhookInput,
+): string[] {
   // If an implementation applies only url/events/description, these are silently ignored.
   const ignored: string[] = [];
   if (patch.isActive !== undefined) ignored.push('isActive');
