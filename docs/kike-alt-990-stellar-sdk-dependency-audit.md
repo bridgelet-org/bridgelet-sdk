@@ -5,6 +5,7 @@ available; confirm the upgrade path and impact on `src/modules/stellar` and any
 manual error-string/contract parsing.
 
 ## Audit checklist
+
 - **Current vs latest:** compare `package.json` (and lockfile if/when used by CI)
   pinned/resolved version of `@stellar/stellar-sdk` with the latest published
   release and its changelog/breaking changes.
@@ -21,6 +22,7 @@ manual error-string/contract parsing.
   before merge of an upgrade).
 
 ## Recommended upgrade approach
+
 1. Bump `@stellar/stellar-sdk` in a dedicated change with changelog review.
 2. Update Stellar module call sites for renamed/removed APIs and stricter types.
 3. Replace brittle string-matching on errors with stable codes/typed checks where
@@ -29,5 +31,6 @@ manual error-string/contract parsing.
 5. Record the decision (upgrade, defer, or pin with rationale) in this audit.
 
 ## Status
+
 - **State:** audit documented (standalone). Actual dependency bump and code
   changes require a separate, tested implementation PR per repo process.

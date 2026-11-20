@@ -5,6 +5,7 @@ README's "Key Endpoints" table has a matching, up-to-date section in
 `docs/api-reference.md`.
 
 ## README "Key Endpoints" to verify documented
+
 - `POST /accounts` — create ephemeral account
 - `GET /accounts` — list accounts
 - `GET /accounts/:id` — get account
@@ -23,6 +24,7 @@ README's "Key Endpoints" table has a matching, up-to-date section in
 > controller routes; reconcile any path/method differences.
 
 ## Required per-endpoint documentation in `docs/api-reference.md`
+
 - [ ] Method + path and short description
 - [ ] Auth requirements (API key / claim token / public) and rate limits where applicable
 - [ ] Path/query/body parameters with types/validation rules
@@ -31,5 +33,6 @@ README's "Key Endpoints" table has a matching, up-to-date section in
 - [ ] Notes for semantics that are easy to misread (e.g. webhook delete soft-deactivation, claim token usage, unauthenticated-but-throttled routes)
 
 ## Outcome
+
 - Any README-listed endpoint missing or out of sync in `docs/api-reference.md`
   should be added/updated so README and API reference remain consistent.
