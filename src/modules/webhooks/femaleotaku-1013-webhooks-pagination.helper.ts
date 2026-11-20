@@ -12,7 +12,9 @@ export const FEMALEOTAKU_1013_DEFAULT_LIMIT = 50;
 export const FEMALEOTAKU_1013_MAX_LIMIT = 100;
 export const FEMALEOTAKU_1013_MAX_OFFSET = 100000;
 
-function parseIntStrict(value: number | string | undefined): number | undefined {
+function parseIntStrict(
+  value: number | string | undefined,
+): number | undefined {
   if (value === undefined) return undefined;
   if (typeof value === 'number') {
     if (!Number.isInteger(value)) throw new Error('INVALID_INTEGER');
@@ -42,7 +44,10 @@ export function femaleotaku1013NormalizeWebhookPagination(
   return { limit, offset };
 }
 
-export function femaleotaku1013ApplyPagination<T>(items: readonly T[], input: Femaleotaku1013PaginationInput) {
+export function femaleotaku1013ApplyPagination<T>(
+  items: readonly T[],
+  input: Femaleotaku1013PaginationInput,
+) {
   const { limit, offset } = femaleotaku1013NormalizeWebhookPagination(input);
   return {
     webhooks: items.slice(offset, offset + limit),

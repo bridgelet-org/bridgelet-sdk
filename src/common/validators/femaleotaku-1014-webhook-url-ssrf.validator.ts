@@ -12,7 +12,11 @@ const BLOCKED_HOSTNAMES = new Set([
 
 function isPrivateOrLocalIpv4(ip: string): boolean {
   const parts = ip.split('.').map((n) => Number(n));
-  if (parts.length !== 4 || parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)) return true;
+  if (
+    parts.length !== 4 ||
+    parts.some((n) => !Number.isInteger(n) || n < 0 || n > 255)
+  )
+    return true;
   const [a, b] = parts;
   if (a === 10) return true;
   if (a === 127) return true;
@@ -49,7 +53,9 @@ function isBlockedIp(ip: string): boolean {
  * destinations (localhost, link-local, cloud metadata IPs, private ranges).
  * Intended for use by DTO validators or delivery guards without wiring changes.
  */
-export function femaleotaku1014ValidateWebhookUrl(input: string): Femaleotaku1014ValidationResult {
+export function femaleotaku1014ValidateWebhookUrl(
+  input: string,
+): Femaleotaku1014ValidationResult {
   let url: URL;
   try {
     url = new URL(input);
@@ -62,7 +68,11 @@ export function femaleotaku1014ValidateWebhookUrl(input: string): Femaleotaku101
   }
 
   const hostname = url.hostname.toLowerCase();
-  if (BLOCKED_HOSTNAMES.has(hostname) || hostname.endsWith('.localhost') || hostname.endsWith('.local')) {
+  if (
+    BLOCKED_HOSTNAMES.has(hostname) ||
+    hostname.endsWith('.localhost') ||
+    hostname.endsWith('.local')
+  ) {
     return { ok: false, reason: 'blocked_hostname' };
   }
 
@@ -71,7 +81,10 @@ export function femaleotaku1014ValidateWebhookUrl(input: string): Femaleotaku101
   }
 
   // Bracketed IPv6 hostnames come through URL.hostname without brackets in some runtimes; be defensive.
-  const bare = hostname.startsWith('[') && hostname.endsWith(']') ? hostname.slice(1, -1) : hostname;
+  const bare =
+    hostname.startsWith('[') && hostname.endsWith(']')
+      ? hostname.slice(1, -1)
+      : hostname;
   if (isIP(bare) && isBlockedIp(bare)) {
     return { ok: false, reason: 'blocked_ip_range' };
   }

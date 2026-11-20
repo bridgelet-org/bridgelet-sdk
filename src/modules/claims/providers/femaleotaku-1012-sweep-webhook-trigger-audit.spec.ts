@@ -14,7 +14,10 @@ describe('femaleotaku-1012 sweep webhook trigger audit (standalone)', () => {
     return ['sweep.partial'];
   }
 
-  async function emitForOutcome(outcome: SweepOutcome, trigger: (event: string) => Promise<void>) {
+  async function emitForOutcome(
+    outcome: SweepOutcome,
+    trigger: (event: string) => Promise<void>,
+  ) {
     for (const event of expectedTerminalEvents(outcome)) {
       await trigger(event);
     }
@@ -22,19 +25,25 @@ describe('femaleotaku-1012 sweep webhook trigger audit (standalone)', () => {
 
   it('emits sweep.completed once for success and does not emit sweep.failed', async () => {
     const seen: string[] = [];
-    await emitForOutcome('success', async (e) => { seen.push(e); });
+    await emitForOutcome('success', async (e) => {
+      seen.push(e);
+    });
     expect(seen).toEqual(['sweep.completed']);
   });
 
   it('emits sweep.failed once for failure and does not emit sweep.completed', async () => {
     const seen: string[] = [];
-    await emitForOutcome('failure', async (e) => { seen.push(e); });
+    await emitForOutcome('failure', async (e) => {
+      seen.push(e);
+    });
     expect(seen).toEqual(['sweep.failed']);
   });
 
   it('treats partial as distinct from completed/failed for a single redemption attempt', async () => {
     const seen: string[] = [];
-    await emitForOutcome('partial', async (e) => { seen.push(e); });
+    await emitForOutcome('partial', async (e) => {
+      seen.push(e);
+    });
     expect(seen).toEqual(['sweep.partial']);
   });
 });
