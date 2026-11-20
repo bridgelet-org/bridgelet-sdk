@@ -30,7 +30,9 @@ export function prismn1017ShouldReturn404(
   records: Prismn1017AccountRecord[],
   id: string,
 ): boolean {
-  return prismn1017VisibleById(records, { id, excludeSoftDeleted: true }) === null;
+  return (
+    prismn1017VisibleById(records, { id, excludeSoftDeleted: true }) === null
+  );
 }
 
 export function prismn1017RegressionCases(): Array<{

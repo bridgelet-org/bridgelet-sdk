@@ -16,7 +16,8 @@ describe('prismn-1018 CreateAccountDto asset_code/asset_issuer combinations (sta
     // Issuer without a non-native asset code, or a non-native code without issuer, is invalid/silent-drop risk.
     const hasIssuer = !!dto.asset_issuer;
     const hasCode = !!dto.asset_code;
-    const isNative = !hasCode || dto.asset_code === 'native' || dto.asset_code === 'XLM';
+    const isNative =
+      !hasCode || dto.asset_code === 'native' || dto.asset_code === 'XLM';
     if (hasIssuer && (!hasCode || isNative)) return true;
     if (hasCode && !isNative && !hasIssuer) return true;
     return false;
@@ -33,18 +34,25 @@ describe('prismn-1018 CreateAccountDto asset_code/asset_issuer combinations (sta
   });
 
   it('accepts issued asset when both code and issuer provided', () => {
-    const dto = { asset_code: 'USDC', asset_issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5' };
+    const dto = {
+      asset_code: 'USDC',
+      asset_issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+    };
     expect(normalizeAsset(dto)).toBe(`${dto.asset_code}:${dto.asset_issuer}`);
     expect(hasInvalidCombination(dto)).toBe(false);
   });
 
   it('flags asset_issuer provided without asset_code (issuer would be silently dropped)', () => {
-    const dto = { asset_issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5' };
+    const dto = {
+      asset_issuer: 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+    };
     expect(hasInvalidCombination(dto)).toBe(true);
   });
 
   it('flags asset_issuer provided with native/XLM code', () => {
-    expect(hasInvalidCombination({ asset_code: 'XLM', asset_issuer: 'GISSUER' })).toBe(true);
+    expect(
+      hasInvalidCombination({ asset_code: 'XLM', asset_issuer: 'GISSUER' }),
+    ).toBe(true);
   });
 
   it('flags non-native asset_code provided without issuer', () => {
