@@ -288,7 +288,8 @@ check it:
   schema matches again. This round trip is the check that catches a `down()`
   that drops the wrong objects or leaves a table behind; add your migration to
   the pinned list in `test/migrations.integration.runner.ts` when you add a new
-  file, and keep the list in the same order as the folder.
+  file, and keep the list in the same order as the folder. CI runs this step on
+  every pull request, so a missing or partial `down()` fails the build.
 
 Note that `down()` methods run in reverse filename order, which matters for the
 three migrations sharing a timestamp (see below): `CreateClaimAuditLogTable`

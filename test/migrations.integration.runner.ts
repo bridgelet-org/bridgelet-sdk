@@ -1,8 +1,9 @@
 import { randomUUID } from 'crypto';
-import { mkdtemp, rm } from 'fs/promises';
+import { mkdtemp, readdir, rm } from 'fs/promises';
 import * as net from 'net';
 import * as os from 'os';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import EmbeddedPostgres from 'embedded-postgres';
 import { DataSource } from 'typeorm';
 import { Account } from '../src/modules/accounts/entities/account.entity.js';
@@ -94,6 +95,39 @@ const highTrafficIndexNames = [
   'IDX_accounts_createdAt',
 ];
 
+const migrationsDirectory = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../src/database/migrations',
+);
+
+// Issue #1043: the `migrations`/`pinnedMigrationOrder` arrays above are
+// maintained by hand. Without a check against the directory, a new migration
+// file that nobody added to those arrays would simply never be exercised by
+// the down()/up round trip — exactly the "untested migration" this runner is
+// meant to catch. Derive the expected class name from each filename
+// (`<timestamp>-<Name>.ts` -> `<Name><timestamp>`, matching the `name`
+// property TypeORM records) and fail if the directory and pinned list diverge.
+function migrationFileNameToClassName(fileName: string): string {
+  const baseName = fileName.replace(/\.ts$/, '');
+  const separator = baseName.indexOf('-');
+
+  if (separator === -1) {
+    throw new Error(
+      `Migration filename "${fileName}" does not match <timestamp>-<Name>.ts`,
+    );
+  }
+
+  return baseName.slice(separator + 1) + baseName.slice(0, separator);
+}
+
+async function readMigrationFileClassNames(): Promise<string[]> {
+  const entries = await readdir(migrationsDirectory);
+  return entries
+    .filter((entry) => entry.endsWith('.ts') && !entry.endsWith('.d.ts'))
+    .sort()
+    .map(migrationFileNameToClassName);
+}
+
 type SqlInMemoryLog = {
   upQueries: unknown[];
 };
@@ -178,6 +212,13 @@ async function getFreePort(): Promise<number> {
 }
 
 async function main(): Promise<void> {
+  const migrationFileClassNames = await readMigrationFileClassNames();
+  const migrationFilesMatchPinned =
+    migrationFileClassNames.length === pinnedMigrationOrder.length &&
+    migrationFileClassNames.every(
+      (name, index) => name === pinnedMigrationOrder[index],
+    );
+
   const port = await getFreePort();
   const postgresDataDir = await mkdtemp(
     path.join(os.tmpdir(), 'bridgelet-migrations-'),
@@ -496,6 +537,8 @@ async function main(): Promise<void> {
       JSON.stringify({
         enumValues,
         executedMigrationNames,
+        migrationFileClassNames,
+        migrationFilesMatchPinned,
         appliedOrderMatchesPinned,
         eightKOrderMatches,
         pinnedMigrationOrder,
@@ -530,6 +573,16 @@ async function main(): Promise<void> {
     // just informational JSON. A non-zero exit here is meant to fail a CI
     // step running this script.
     const failures: string[] = [];
+
+    if (!migrationFilesMatchPinned) {
+      failures.push(
+        `The migration files on disk do not match the pinned list (#1043). ` +
+          `files=${JSON.stringify(migrationFileClassNames)} ` +
+          `pinned=${JSON.stringify(pinnedMigrationOrder)}. ` +
+          `Add the new migration to both the \`migrations\` array and ` +
+          `\`pinnedMigrationOrder\` so its down() is exercised by the round trip.`,
+      );
+    }
 
     if (!appliedOrderMatchesPinned) {
       failures.push(
@@ -579,7 +632,16 @@ async function main(): Promise<void> {
     }
 
     await postgresServer.stop();
-    await rm(postgresDataDir, { recursive: true, force: true });
+    // Windows can briefly keep handles on the data directory after stop()
+    // returns, which surfaces as EBUSY/EPERM from rm even though every
+    // assertion passed. fs.rm retries those specific codes, so the runner's
+    // exit status reflects the migration checks rather than cleanup timing.
+    await rm(postgresDataDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 10,
+      retryDelay: 250,
+    });
   }
 }
 

@@ -318,10 +318,12 @@ zero, then `up` again. Run it with:
 npm run test:migrations
 ```
 
-It is not part of `npm test` (Jest's `rootDir` is `src/`), so it has to be
-invoked explicitly. It verifies:
+It is not part of `npm test` (Jest's `rootDir` is `src/`), so `npm run
+test:migrations` runs it as its own step; CI runs that step on every pull
+request to `main`/`develop`, so a `down()` regression fails the build rather
+than only surfacing during a production rollback. It verifies:
 
-1. All twelve migrations apply **in the pinned filename order** — the order is
+1. All fourteen migrations apply **in the pinned filename order** — the order is
    asserted against a fixed list, so a reordering regression fails the run.
    This matters for the three files sharing the `1718100008000` timestamp
    (`AddDeletedAtToAccountsTable`, `AddPartialSweepToAccountStatus`,

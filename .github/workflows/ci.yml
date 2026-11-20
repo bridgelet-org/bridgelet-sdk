@@ -51,5 +51,13 @@ jobs:
       - name: Unit Tests
         run: npm run test
 
+      # Issue #1043: the `down()`/`migration:revert` path is only exercised by
+      # the embedded-Postgres round-trip runner, which is not part of `npm test`
+      # (Jest's rootDir is `src/`). Run it here so a migration whose `down()` is
+      # missing or only partially reverses its `up()` fails CI instead of
+      # surfacing for the first time during a production rollback.
+      - name: Migration down/up round-trip
+        run: npm run test:migrations
+
       - name: Build Verification
         run: npm run build
