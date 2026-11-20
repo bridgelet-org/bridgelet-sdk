@@ -58,7 +58,11 @@ describe('eniolaagoro7-1003 Stellar StrKey public key checksum audit (standalone
   it('rejects malformed strings (prefix/charset/length)', () => {
     expect(isValidEd25519PublicKey('')).toBe(false);
     expect(isValidEd25519PublicKey('not-a-key')).toBe(false);
-    expect(isValidEd25519PublicKey('MAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7')).toBe(false);
+    expect(
+      isValidEd25519PublicKey(
+        'MAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7',
+      ),
+    ).toBe(false);
   });
 
   it('rejects checksum-invalid but format/plausible-looking keys', () => {
@@ -77,7 +81,8 @@ describe('eniolaagoro7-1003 Stellar StrKey public key checksum audit (standalone
     let rejections = 0;
     for (let i = 0; i < 40; i += 1) {
       const idx = 1 + (i % (VALID.length - 1));
-      const replacement = ALPHABET[(ALPHABET.indexOf(VALID[idx]) + 1 + i) % ALPHABET.length];
+      const replacement =
+        ALPHABET[(ALPHABET.indexOf(VALID[idx]) + 1 + i) % ALPHABET.length];
       const mutated = mutateChar(VALID, idx, replacement);
       if (!isValidEd25519PublicKey(mutated)) rejections += 1;
     }

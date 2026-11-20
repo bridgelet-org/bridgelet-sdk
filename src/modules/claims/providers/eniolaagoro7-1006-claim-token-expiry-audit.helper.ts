@@ -7,7 +7,8 @@
  * expired rather than relying on downstream 404s.
  */
 
-export const ENIOLAAGORO7_1006_DEFAULT_CLAIM_TOKEN_EXPIRY_SECONDS = 30 * 24 * 60 * 60; // 2592000
+export const ENIOLAAGORO7_1006_DEFAULT_CLAIM_TOKEN_EXPIRY_SECONDS =
+  30 * 24 * 60 * 60; // 2592000
 
 export interface Eniolaagoro7_1006AccountExpiryState {
   accountId: string;
@@ -18,14 +19,20 @@ export interface Eniolaagoro7_1006AccountExpiryState {
 
 export type Eniolaagoro7_1006Decision =
   | { allow: true }
-  | { allow: false; reason: 'account_expired' | 'account_missing' | 'claim_token_expired' };
+  | {
+      allow: false;
+      reason: 'account_expired' | 'account_missing' | 'claim_token_expired';
+    };
 
 export function eniolaagoro7_1006IsAccountExpired(
   accountExpiresAt: Date | string | null | undefined,
   now: Date = new Date(),
 ): boolean {
   if (!accountExpiresAt) return false;
-  const ts = typeof accountExpiresAt === 'string' ? new Date(accountExpiresAt) : accountExpiresAt;
+  const ts =
+    typeof accountExpiresAt === 'string'
+      ? new Date(accountExpiresAt)
+      : accountExpiresAt;
   if (Number.isNaN(ts.getTime())) return false;
   return ts.getTime() <= now.getTime();
 }
@@ -34,7 +41,10 @@ export function eniolaagoro7_1006EvaluateClaimEligibility(
   state: Eniolaagoro7_1006AccountExpiryState,
   now: Date = new Date(),
 ): Eniolaagoro7_1006Decision {
-  if (state.claimTokenExp !== undefined && state.claimTokenExp * 1000 <= now.getTime()) {
+  if (
+    state.claimTokenExp !== undefined &&
+    state.claimTokenExp * 1000 <= now.getTime()
+  ) {
     return { allow: false, reason: 'claim_token_expired' };
   }
   if (eniolaagoro7_1006IsAccountExpired(state.accountExpiresAt, now)) {
