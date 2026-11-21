@@ -23,6 +23,17 @@ import { AccountEventsProvider } from '../account-events/providers/account-event
 /**
  * PaymentMonitorService - interval-based payment detection.
  *
+ * ## Responsibility boundary (#1032)
+ *
+ * Owns the scheduled, batch-oriented poll of every unexpired `PENDING_PAYMENT`
+ * account: it asks Horizon for payment operations, follows paging tokens, calls
+ * `StellarService.recordPayment()`, and conditionally advances account status.
+ * It does **not** own per-account SSE streams; that is the responsibility of
+ * `PaymentMonitorProvider` in `src/modules/stellar/providers/`. The two never
+ * call each other - they converge only on idempotent contract writes and
+ * conditional `PENDING_PAYMENT -> PENDING_CLAIM` updates, which is what makes
+ * running both at once safe (details below).
+ *
  * Polls Horizon on a fixed interval for inbound payments to every account still
  * in `PENDING_PAYMENT`. For each payment found it calls
  * `StellarService.recordPayment()` to register it on the contract and moves the

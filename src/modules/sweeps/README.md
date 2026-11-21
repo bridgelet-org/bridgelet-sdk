@@ -55,6 +55,22 @@ sequenceDiagram
     S-->>C: SweepResult
 ```
 
+### Code map
+
+| Step         | Entry point                                     | Network boundary                |
+| ------------ | ----------------------------------------------- | ------------------------------- |
+| 1. Validate  | `ValidationProvider.validateSweepParameters()`  | none (DB/parameter checks only) |
+| 2. Sign      | `ContractProvider.generateAuthSignature()`      | none (local/KMS signing)        |
+| 3. Authorize | `StellarService.executeSweep()`                 | Soroban RPC                     |
+| 4. Transfer  | `TransactionProvider.executeSweepTransaction()` | Horizon                         |
+
+`SweepsService.executeSweep()` is the only orchestrator; the providers never call
+each other. On a `PARTIAL_SWEEP` retry the orchestrator passes
+`skipContractAuth: true`, so steps 2 and 3 are replaced by a deterministic hash
+recomputation and the sequence becomes `Validation → auth-hash → Horizon`. The
+diagram above shows the fresh-sweep path; the retry path deliberately skips the
+Soroban participants.
+
 ### Failure between steps 3 and 4
 
 If step 3 succeeds and step 4 fails, the contract is in `Swept` state but **no
@@ -174,7 +190,8 @@ curl -X POST http://localhost:3000/api/sweeps \
 
 3. Verify transaction on Stellar Explorer
 4. Check destination account received funds
-5. Verify ephemeral account merged (if successful)
+5. Confirm the account status is `CLAIMED` (reserve reclamation is a separate
+   reclamation job, not part of this flow)
 
 ## Configuration
 

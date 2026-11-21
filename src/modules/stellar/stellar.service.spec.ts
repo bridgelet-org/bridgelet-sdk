@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import * as StellarSdk from '@stellar/stellar-sdk';
@@ -140,6 +142,34 @@ describe('StellarService', () => {
       const kp1 = service.generateKeypair();
       const kp2 = service.generateKeypair();
       expect(kp1.publicKey()).not.toBe(kp2.publicKey());
+    });
+
+    it('delegates once to the SDK CSPRNG instead of a local helper', () => {
+      const randomSpy = jest.spyOn(StellarSdk.Keypair, 'random');
+
+      try {
+        const keypair = service.generateKeypair();
+        expect(randomSpy).toHaveBeenCalledTimes(1);
+        expect(keypair).toBe(randomSpy.mock.results[0].value);
+      } finally {
+        randomSpy.mockRestore();
+      }
+    });
+
+    it('has no weaker RNG in the generateKeypair method body', () => {
+      const source = readFileSync(
+        join(process.cwd(), 'src/modules/stellar/stellar.service.ts'),
+        'utf8',
+      );
+      const fromMethod = source.slice(
+        source.indexOf('generateKeypair(): StellarSdk.Keypair {'),
+      );
+      const body = fromMethod.slice(0, fromMethod.indexOf('\n  }'));
+
+      expect(body).toContain('StellarSdk.Keypair.random()');
+      expect(body).not.toMatch(
+        /Math\.random|randomBytes|fromRawEd25519Seed|Keypair\.fromSeed/,
+      );
     });
 
     // #654 / #715: generateKeypair produces the secret key for an account that holds

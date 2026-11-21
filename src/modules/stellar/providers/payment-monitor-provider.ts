@@ -17,6 +17,18 @@ import { AccountEventsProvider } from '../../account-events/providers/account-ev
 /**
  * PaymentMonitorProvider - Horizon SSE-based payment detection
  *
+ * ## Responsibility boundary (#1032)
+ *
+ * Owns one long-lived Horizon SSE stream per watched account: it opens the
+ * stream with a `now` cursor, reacts to inbound payment events, calls
+ * `StellarService.recordPayment()`, and conditionally advances the account
+ * status. It does **not** own scheduled batch polling, historical paging, or
+ * startup recovery of the poll loop; those belong to `PaymentMonitorService`
+ * in `src/modules/payment-monitor/`. The two never call each other - they
+ * converge only on idempotent contract writes and conditional
+ * `PENDING_PAYMENT -> PENDING_CLAIM` updates, which is what makes running both
+ * at once safe (details below).
+ *
  * Watches active ephemeral accounts for inbound Stellar payments using
  * Horizon's server-sent event stream. When a payment is detected it:
  *   1. Calls StellarService.recordPayment() to register it on the contract
