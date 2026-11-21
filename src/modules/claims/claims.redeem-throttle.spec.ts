@@ -1,3 +1,4 @@
+import type { Server } from 'http';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import { ThrottlerModule } from '@nestjs/throttler';
@@ -123,6 +124,19 @@ describe('claim route rate limiting', () => {
       await attempt('/claims/redeem', REDEEM_LIMIT + 2);
       const verifyStatuses = await attempt('/claims/verify', VERIFY_LIMIT);
       expect(verifyStatuses.some((s) => s === 429)).toBe(false);
+    });
+  });
+
+  describe('POST /claims/initiate (#1023)', () => {
+    it('does not exist, so there is no unthrottled token-issuance route', async () => {
+      const server = app.getHttpServer() as Server;
+      const res = await request(server)
+        .post('/claims/initiate')
+        .send({ accountId: '4ebae33b-5b93-424c-858d-d79afc708af5' });
+
+      expect(res.status).toBe(404);
+      expect(redeemClaim).not.toHaveBeenCalled();
+      expect(verifyClaimToken).not.toHaveBeenCalled();
     });
   });
 

@@ -385,6 +385,77 @@ describe('ClaimRedemptionProvider', () => {
         p.redeemClaim(VALID_TOKEN, VALID_DESTINATION),
       ).rejects.toThrow(ConflictException);
     });
+
+    it('allows only one winner when two calls race for the same token (#1026)', async () => {
+      let releaseSecondReader!: () => void;
+      const firstClaimPersisted = new Promise<void>((resolve) => {
+        releaseSecondReader = resolve;
+      });
+      let lockedStatus: AccountStatus = AccountStatus.PENDING_CLAIM;
+      let transactionNumber = 0;
+
+      const ds = {
+        transaction: jest.fn().mockImplementation((cb) => {
+          transactionNumber += 1;
+
+          if (transactionNumber === 1) {
+            const manager = makeManager({
+              ...mockAccount,
+              status: lockedStatus,
+            });
+            manager.save.mockImplementation((entity: unknown) => {
+              if (
+                entity &&
+                typeof entity === 'object' &&
+                'status' in entity &&
+                entity.status === AccountStatus.CLAIMING
+              ) {
+                lockedStatus = AccountStatus.CLAIMING;
+              }
+              releaseSecondReader();
+              return entity;
+            });
+            return cb(manager);
+          }
+
+          if (transactionNumber === 2) {
+            const manager = makeManager(null);
+            manager.qb.getOne.mockImplementation(async () => {
+              await firstClaimPersisted;
+              return { ...mockAccount, status: lockedStatus };
+            });
+            return cb(manager);
+          }
+
+          const manager = makeManager(null);
+          manager.save
+            .mockResolvedValueOnce(undefined)
+            .mockResolvedValueOnce({ ...mockClaim });
+          manager.create.mockReturnValue({ ...mockClaim });
+          return cb(manager);
+        }),
+      };
+      const p = await buildModule(ds);
+
+      const results = await Promise.allSettled([
+        p.redeemClaim(VALID_TOKEN, VALID_DESTINATION),
+        p.redeemClaim(VALID_TOKEN, VALID_DESTINATION),
+      ]);
+
+      expect(
+        results.filter((result) => result.status === 'fulfilled'),
+      ).toHaveLength(1);
+      expect(
+        results.filter((result) => result.status === 'rejected'),
+      ).toHaveLength(1);
+      const rejection = results.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === 'rejected',
+      );
+      expect(rejection?.reason).toBeInstanceOf(ConflictException);
+      expect(mockSweepsService.executeSweep).toHaveBeenCalledTimes(1);
+      expect(ds.transaction.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
   });
 
   describe('redeemClaim - Stellar address validation', () => {
