@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { InternalServerErrorException } from '@nestjs/common';
@@ -451,6 +453,20 @@ describe('ContractProvider', () => {
       expect(provider.getContractInfo(validParams.contractId).version).not.toBe(
         '0.1.0',
       );
+    });
+
+    it('does not hardcode 0.1.0 in the provider source either (#1028)', () => {
+      const source = readFileSync(
+        join(
+          process.cwd(),
+          'src/modules/sweeps/providers/contract.provider.ts',
+        ),
+        'utf8',
+      );
+
+      expect(source).not.toContain("'0.1.0'");
+      expect(source).not.toContain('"0.1.0"');
+      expect(source).toContain('stellar.contracts.ephemeralAccountVersion');
     });
 
     it('should report the version as unknown when it is not configured', async () => {

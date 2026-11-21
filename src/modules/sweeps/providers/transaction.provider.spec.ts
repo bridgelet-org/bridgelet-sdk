@@ -1979,6 +1979,26 @@ describe('TransactionProvider', () => {
       expect(result.feeBump).toBe(true);
       expect(result.innerTransactionHash).toBe('merge-hash-inner');
     });
+
+    it('should report the fee-bump fields on removeTrustline results too', async () => {
+      // #1029: every TransactionResult-producing path must carry the audit
+      // flag, not just the payment and merge paths.
+      mockSubmitTransaction.mockResolvedValue({
+        hash: 'trustline-hash-outer',
+        ledger: 103,
+        successful: true,
+        fee_bump_transaction: { hash: 'trustline-hash-outer' },
+        inner_transaction: { hash: 'trustline-hash-inner' },
+      });
+
+      const result = await provider.removeTrustline({
+        ephemeralSecret: 'S_VALID_SECRET',
+        asset: 'USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5',
+      });
+
+      expect(result.feeBump).toBe(true);
+      expect(result.innerTransactionHash).toBe('trustline-hash-inner');
+    });
   });
   /**
    * #647: the account-merge path must honour the same Horizon ledger contract

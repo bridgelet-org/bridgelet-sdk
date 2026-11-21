@@ -64,6 +64,7 @@ describe('SweepsService', () => {
   };
   let transactionProvider: {
     executeSweepTransaction: jest.Mock<() => Promise<any>>;
+    mergeAccount: jest.Mock<() => Promise<any>>;
   };
   let stellarService: {
     executeSweep: jest.Mock<() => Promise<any>>;
@@ -88,6 +89,9 @@ describe('SweepsService', () => {
 
     transactionProvider = {
       executeSweepTransaction: jest.fn<any>().mockResolvedValue(mockTxResult),
+      // #1027: available on the provider for the scheduler's reclamation
+      // path, but the sweep strategy itself must never call it.
+      mergeAccount: jest.fn<any>().mockResolvedValue(mockTxResult),
     };
 
     stellarService = {
@@ -229,6 +233,18 @@ describe('SweepsService', () => {
         amount: validRequest.amount,
         asset: validRequest.asset,
       });
+    });
+
+    it('never uses the account-merge strategy (#1027)', async () => {
+      await service.executeSweep(validRequest);
+
+      // MergeAccountParams looks like an alternate sweep strategy, but it
+      // belongs exclusively to scheduler-driven account reclamation. A
+      // payment sweep has different reserve/fee semantics and must not call it.
+      expect(transactionProvider.mergeAccount).not.toHaveBeenCalled();
+      expect(transactionProvider.executeSweepTransaction).toHaveBeenCalledTimes(
+        1,
+      );
     });
 
     it('calls validation before the contract call', async () => {
