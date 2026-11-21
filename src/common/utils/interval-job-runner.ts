@@ -7,6 +7,16 @@ export interface IntervalJobRunnerOptions {
 }
 
 /**
+ * Shared jitter policy for the periodic jobs started by SchedulerService and
+ * PaymentMonitorService. Keeping the formula here means every runner spreads
+ * its first tick by up to 10% of the interval (capped at 5s) using the same
+ * rule, instead of each service maintaining a copy that can drift.
+ */
+export function defaultJitterMs(intervalMs: number): number {
+  return Math.min(Math.floor(intervalMs * 0.1), 5_000);
+}
+
+/**
  * Runs an asynchronous job repeatedly without allowing executions to overlap.
  * Each next run is scheduled only after the previous one settles, and optional
  * jitter spreads workers that start at the same time across a small window.

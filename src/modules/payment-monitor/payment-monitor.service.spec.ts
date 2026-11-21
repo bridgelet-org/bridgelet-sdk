@@ -236,6 +236,23 @@ describe('PaymentMonitorService', () => {
       expect(mockPaymentsBuilder.forAccount).not.toHaveBeenCalled();
     });
 
+    it('does not call Horizon for an expired account returned by the query', async () => {
+      // Issue #1040: the MoreThan predicate is the primary filter, but a row
+      // can cross expiresAt between the SELECT and the poll. The per-account
+      // guard must still keep it away from Horizon.
+      const expired = makeAccount({
+        id: 'expired-account',
+        publicKey: 'GEXPIRED',
+        expiresAt: new Date(Date.now() - 1_000),
+      });
+      accountsRepo.find.mockResolvedValueOnce([expired]);
+
+      await service.pollAllAccounts();
+
+      expect(mockPaymentsBuilder.forAccount).not.toHaveBeenCalled();
+      expect(stellarService.recordPayment).not.toHaveBeenCalled();
+    });
+
     it('polls each active account independently', async () => {
       const acc1 = makeAccount({ id: 'a1', publicKey: 'GPK1' });
       const acc2 = makeAccount({ id: 'a2', publicKey: 'GPK2' });

@@ -1,4 +1,14 @@
-import { IntervalJobRunner } from './interval-job-runner.js';
+import { defaultJitterMs, IntervalJobRunner } from './interval-job-runner.js';
+
+describe('defaultJitterMs', () => {
+  it('uses 10% of short intervals', () => {
+    expect(defaultJitterMs(1_000)).toBe(100);
+  });
+
+  it('caps jitter at five seconds for long intervals', () => {
+    expect(defaultJitterMs(120_000)).toBe(5_000);
+  });
+});
 
 describe('IntervalJobRunner', () => {
   beforeEach(() => jest.useFakeTimers());

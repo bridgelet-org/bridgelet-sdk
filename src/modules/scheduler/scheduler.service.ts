@@ -12,7 +12,10 @@ import { Account } from '../accounts/entities/account.entity.js';
 import { AccountStatus } from '../accounts/enums/account-status.enum.js';
 import { assertValidAccountStatusTransition } from '../accounts/enums/account-status-transition.util.js';
 import { WebhooksService } from '../webhooks/webhooks.service.js';
-import { IntervalJobRunner } from '../../common/utils/interval-job-runner.js';
+import {
+  defaultJitterMs,
+  IntervalJobRunner,
+} from '../../common/utils/interval-job-runner.js';
 import { AccountMetricsProvider } from '../../common/metrics/account-metrics.provider.js';
 import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter } from 'prom-client';
@@ -101,7 +104,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   ): IntervalJobRunner {
     return new IntervalJobRunner({
       intervalMs,
-      jitterMs: Math.min(Math.floor(intervalMs * 0.1), 5_000),
+      jitterMs: defaultJitterMs(intervalMs),
       task,
       onError: (error) => {
         const message = error instanceof Error ? error.message : String(error);

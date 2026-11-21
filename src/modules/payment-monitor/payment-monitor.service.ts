@@ -12,7 +12,10 @@ import { StellarService } from '../stellar/stellar.service.js';
 import { Account } from '../accounts/entities/account.entity.js';
 import { AccountStatus } from '../accounts/enums/account-status.enum.js';
 import { assertValidAccountStatusTransition } from '../accounts/enums/account-status-transition.util.js';
-import { IntervalJobRunner } from '../../common/utils/interval-job-runner.js';
+import {
+  defaultJitterMs,
+  IntervalJobRunner,
+} from '../../common/utils/interval-job-runner.js';
 import { PaymentMonitorHealthProvider } from '../../common/metrics/payment-monitor-health.provider.js';
 import {
   parseAmountToStroops,
@@ -86,7 +89,7 @@ export class PaymentMonitorService implements OnModuleInit, OnModuleDestroy {
     );
     this.pollRunner = new IntervalJobRunner({
       intervalMs,
-      jitterMs: Math.min(Math.floor(intervalMs * 0.1), 5_000),
+      jitterMs: defaultJitterMs(intervalMs),
       task: () => this.pollAllAccounts(),
       onError: (error) => {
         const message = error instanceof Error ? error.message : String(error);

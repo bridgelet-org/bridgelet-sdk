@@ -290,6 +290,19 @@ async function main(): Promise<void> {
         (name, index) => name === expectedEightKPrefixOrder[index],
       );
 
+    // Issue #1042: derive the tie-break order from the filenames on disk as
+    // well, so the assertion cannot be satisfied by changing only the
+    // hard-coded list. TypeORM's stable sort relies on the folder listing
+    // being alphabetical for these three equal-timestamp migrations.
+    const expectedEightKPrefixOrderFromFileNames =
+      migrationFileClassNames.filter((name) => name.endsWith('1718100008000'));
+    const eightKMatchesFileOrder =
+      eightKPrefixOrder.length ===
+        expectedEightKPrefixOrderFromFileNames.length &&
+      eightKPrefixOrder.every(
+        (name, index) => name === expectedEightKPrefixOrderFromFileNames[index],
+      );
+
     const schemaUpQueries = await readSchemaUpQueries(dataSource);
     const enumValues = await readAccountStatusEnumValues(dataSource);
 
@@ -498,6 +511,18 @@ async function main(): Promise<void> {
         (name, index) => name === pinnedMigrationOrder[index],
       );
 
+    // Issue #1042: the filename tie-break must survive the full revert/re-up
+    // round trip too, not just the first `up`.
+    const reappliedEightKPrefixOrder = reappliedMigrationNames.filter((name) =>
+      name.includes('1718100008000'),
+    );
+    const reappliedEightKOrderMatches =
+      reappliedEightKPrefixOrder.length ===
+        expectedEightKPrefixOrderFromFileNames.length &&
+      reappliedEightKPrefixOrder.every(
+        (name, index) => name === expectedEightKPrefixOrderFromFileNames[index],
+      );
+
     const schemaUpQueriesAfterReapply = await readSchemaUpQueries(dataSource);
     const schemaMatchesAfterReapply =
       JSON.stringify([...schemaUpQueriesAfterReapply].sort()) ===
@@ -528,6 +553,7 @@ async function main(): Promise<void> {
       rollbackReturnedToPriorState &&
       reapplyError === null &&
       reappliedOrderMatchesPinned &&
+      reappliedEightKOrderMatches &&
       schemaMatchesAfterReapply &&
       enumMatchesAfterReapply &&
       highTrafficIndexesMatchAfterReapply &&
@@ -541,6 +567,8 @@ async function main(): Promise<void> {
         migrationFilesMatchPinned,
         appliedOrderMatchesPinned,
         eightKOrderMatches,
+        eightKMatchesFileOrder,
+        expectedEightKPrefixOrderFromFileNames,
         pinnedMigrationOrder,
         foreignKeyColumns,
         foreignKeyRejected,
@@ -560,6 +588,8 @@ async function main(): Promise<void> {
         reapplyError,
         reappliedMigrationNames,
         reappliedOrderMatchesPinned,
+        reappliedEightKPrefixOrder,
+        reappliedEightKOrderMatches,
         schemaMatchesAfterReapply,
         enumMatchesAfterReapply,
         highTrafficIndexesAfterReapply,
@@ -595,6 +625,22 @@ async function main(): Promise<void> {
     if (!eightKOrderMatches) {
       failures.push(
         'The 1718100008000-prefixed migrations did not execute in deterministic filename order (#948).',
+      );
+    }
+
+    if (!eightKMatchesFileOrder) {
+      failures.push(
+        `The 1718100008000 migrations did not follow the order of the files on disk (#1042). ` +
+          `applied=${JSON.stringify(eightKPrefixOrder)} ` +
+          `files=${JSON.stringify(expectedEightKPrefixOrderFromFileNames)}`,
+      );
+    }
+
+    if (!reappliedEightKOrderMatches) {
+      failures.push(
+        `The 1718100008000 migrations lost their filename order after the full revert/re-up round trip (#1042). ` +
+          `applied=${JSON.stringify(reappliedEightKPrefixOrder)} ` +
+          `files=${JSON.stringify(expectedEightKPrefixOrderFromFileNames)}`,
       );
     }
 
