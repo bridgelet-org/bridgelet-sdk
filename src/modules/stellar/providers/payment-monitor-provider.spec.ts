@@ -71,6 +71,7 @@ const mockStreamFn = jest.fn(({ onmessage, onerror }) => {
 const mockPaymentsBuilder = {
   forAccount: jest.fn().mockReturnThis(),
   cursor: jest.fn().mockReturnThis(),
+  call: jest.fn(),
   stream: mockStreamFn,
 };
 
@@ -126,6 +127,7 @@ describe('PaymentMonitorProvider', () => {
     mockStreamFn.mockClear();
     mockPaymentsBuilder.forAccount.mockClear();
     mockPaymentsBuilder.cursor.mockClear();
+    mockPaymentsBuilder.call.mockClear();
 
     accountsRepo = {
       update: jest
@@ -627,6 +629,40 @@ describe('PaymentMonitorProvider', () => {
         { status: AccountStatus.PENDING_CLAIM },
       );
       expect(mockCloseStream).toHaveBeenCalledTimes(1);
+    });
+
+    it('consumes the whole SSE page via the now cursor, never a first-page-only call()', async () => {
+      // #1036: the provider is push-based. A regression that swapped the
+      // cursor stream for payments().call() would inspect only Horizon's
+      // first page and miss the expected payment after 200 small ones.
+      const observedTokens: string[] = [];
+      for (let pagingToken = 1000; pagingToken < 1200; pagingToken++) {
+        const token = String(pagingToken);
+        observedTokens.push(token);
+        capturedOnMessage!(
+          makePaymentRecord({
+            paging_token: token,
+            amount: '0.0000010',
+          }),
+        );
+      }
+      observedTokens.push('1200');
+      capturedOnMessage!(
+        makePaymentRecord({
+          paging_token: '1200',
+          amount: '100.0000000',
+        }),
+      );
+      await new Promise(setImmediate);
+
+      expect(mockPaymentsBuilder.cursor).toHaveBeenCalledWith('now');
+      expect(mockPaymentsBuilder.call).not.toHaveBeenCalled();
+      expect(observedTokens).toHaveLength(201);
+      expect(observedTokens[200]).toBe('1200');
+      expect(stellarService.recordPayment).toHaveBeenCalledTimes(1);
+      expect(stellarService.recordPayment).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 1_000_000_000n }),
+      );
     });
   });
 });

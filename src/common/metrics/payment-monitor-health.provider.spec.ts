@@ -52,4 +52,19 @@ describe('PaymentMonitorHealthProvider', () => {
       await metricValue(registry, 'payment_monitor_stream_restarts_total'),
     ).toBe(2);
   });
+
+  it('counts isolated poll-tick failures separately from stream restarts', async () => {
+    const registry = new Registry();
+    const provider = new PaymentMonitorHealthProvider(registry);
+
+    provider.recordPollFailure();
+    provider.recordPollFailure();
+
+    expect(
+      await metricValue(registry, 'payment_monitor_poll_failures_total'),
+    ).toBe(2);
+    expect(
+      await metricValue(registry, 'payment_monitor_stream_restarts_total'),
+    ).toBe(0);
+  });
 });

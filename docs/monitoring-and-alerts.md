@@ -13,6 +13,7 @@ includes both the PostgreSQL pool check and the payment-monitor lag check.
 | `expiry_job_failures_total`                | counter | -            | Expiry query, missing-contract-ID, and per-account expiry failures.             |
 | `sweep_failure_by_code_total`              | counter | `error_code` | Failed sweeps by stable contract/Horizon error code.                            |
 | `payment_monitor_stream_restarts_total`    | counter | -            | Horizon SSE error/reconnect events.                                             |
+| `payment_monitor_poll_failures_total`      | counter | -            | Isolated per-account failures in interval poll ticks (#1038).                   |
 | `payment_monitor_seconds_since_last_event` | gauge   | -            | Seconds since either monitor last processed a Horizon event.                    |
 
 Existing sweep metrics (`sweep_completed_total`, `sweep_failed_total`,

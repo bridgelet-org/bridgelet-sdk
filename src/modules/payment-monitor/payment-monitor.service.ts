@@ -153,6 +153,10 @@ export class PaymentMonitorService implements OnModuleInit, OnModuleDestroy {
       this.paymentMonitorHealth.recordProcessedEvent();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+      // #1038: isolation is not silence — the other accounts keep running,
+      // but the failure is both logged and counted so a partial-batch outage
+      // is visible on /metrics instead of only in log aggregation.
+      this.paymentMonitorHealth.recordPollFailure();
       this.logger.error(
         `Poll tick failed for account ${account.id} (${account.publicKey}): ${msg}`,
       );

@@ -744,6 +744,17 @@ describe('StellarService', () => {
         `get_info returned no value for ${CONTRACT_ID}`,
       );
     });
+
+    it('rejects a non-map retval even when isSimulationError says ok', async () => {
+      sorobanServer.simulateTransaction.mockResolvedValue({
+        result: { retval: StellarSdk.xdr.ScVal.scvU32(1) },
+      });
+      jest.spyOn(SorobanRpc.Api, 'isSimulationError').mockReturnValue(false);
+
+      await expect(service.getAccountInfo(CONTRACT_ID)).rejects.toThrow(
+        `get_info returned unexpected ScVal type for ${CONTRACT_ID}`,
+      );
+    });
   });
 
   // ── waitForTransaction (via createEphemeralAccount) ─────────────────────────
@@ -1035,6 +1046,25 @@ describe('StellarService', () => {
 
       await expect(service.getSweepNonce(CONTRACT_ID)).rejects.toThrow(
         'get_nonce returned no value',
+      );
+    });
+
+    it('propagates network failures from simulateTransaction', async () => {
+      sorobanServer.simulateTransaction.mockRejectedValue(
+        new Error('Soroban RPC timeout'),
+      );
+
+      await expect(service.getSweepNonce(CONTRACT_ID)).rejects.toThrow(
+        'Soroban RPC timeout',
+      );
+    });
+
+    it('rejects a completely malformed simulation response', async () => {
+      jest.spyOn(SorobanRpc.Api, 'isSimulationError').mockReturnValue(false);
+      sorobanServer.simulateTransaction.mockResolvedValue({});
+
+      await expect(service.getSweepNonce(CONTRACT_ID)).rejects.toThrow(
+        `get_nonce returned no value for ${CONTRACT_ID}`,
       );
     });
 

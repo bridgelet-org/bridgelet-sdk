@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import {
   STELLAR_SDK_PACKAGE,
   describePinFailure,
@@ -221,5 +223,21 @@ describe('the repository package.json', () => {
 
   it('pins @stellar/stellar-sdk to an exact version', () => {
     expect(evaluateStellarSdkPin(pkg)).toEqual({ ok: true, version: '17.2.1' });
+  });
+
+  // #1035: the README used to name 14.6.1 while package.json carried the
+  // caret range ^14.4.3. Both now state the same exact pin; assert the
+  // reconciliation so a future version bump cannot update only one of them.
+  it('documents the same exact pin in README.md', () => {
+    const result = evaluateStellarSdkPin(pkg);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const readme = readFileSync(join(process.cwd(), 'README.md'), 'utf8');
+    expect(readme).toContain(`exact version \`${result.version}\``);
+    expect(readme).toContain(`exact version** (\`${result.version}\`)`);
+    expect(readme).not.toContain('14.6.1');
+    expect(readme).not.toContain('14.4.3');
+    expect(readme).not.toContain('`^14.4.3`');
   });
 });

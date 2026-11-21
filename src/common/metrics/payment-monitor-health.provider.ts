@@ -9,12 +9,15 @@ import { Counter, Gauge, Registry, register } from 'prom-client';
  * `lastProcessedEventAt` starts at process start rather than `null`, so a
  * freshly started service is not immediately reported as lagging. Any event
  * received by either monitor moves it forward. Health compares the elapsed
- * time against `app.paymentMonitorLagThresholdMs`.
+ * time against `app.paymentMonitorLagThresholdMs`. Per-account poll-tick
+ * failures are counted separately so an isolated failure is observable even
+ * though it never aborts the tick (#1038).
  */
 @Injectable()
 export class PaymentMonitorHealthProvider {
   private readonly secondsSinceLastEventGauge: Gauge;
   private readonly streamRestartsCounter: Counter;
+  private readonly pollFailuresCounter: Counter;
 
   private lastProcessedEventAt = new Date();
 
@@ -29,6 +32,11 @@ export class PaymentMonitorHealthProvider {
       'Total number of Horizon payment stream error/reconnect events',
       registry,
     );
+    this.pollFailuresCounter = this.getOrCreateCounter(
+      'payment_monitor_poll_failures_total',
+      'Total number of per-account failures during payment monitor poll ticks',
+      registry,
+    );
 
     this.secondsSinceLastEventGauge.set(0);
   }
@@ -40,6 +48,10 @@ export class PaymentMonitorHealthProvider {
 
   recordStreamRestart(): void {
     this.streamRestartsCounter.inc();
+  }
+
+  recordPollFailure(): void {
+    this.pollFailuresCounter.inc();
   }
 
   refreshGauge(now: Date = new Date()): number {

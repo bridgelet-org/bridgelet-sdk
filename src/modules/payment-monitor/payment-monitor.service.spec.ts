@@ -100,6 +100,7 @@ describe('PaymentMonitorService', () => {
   let paymentMonitorHealth: {
     refreshGauge: jest.Mock;
     recordProcessedEvent: jest.Mock;
+    recordPollFailure: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -138,6 +139,7 @@ describe('PaymentMonitorService', () => {
     paymentMonitorHealth = {
       refreshGauge: jest.fn(() => 0),
       recordProcessedEvent: jest.fn(),
+      recordPollFailure: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -605,6 +607,9 @@ describe('PaymentMonitorService', () => {
       expect(paymentMonitorHealth.recordProcessedEvent).toHaveBeenCalledTimes(
         1,
       );
+      // #1038: isolation must not mean a silent failure — the failed account
+      // is counted even though the successful one still completes.
+      expect(paymentMonitorHealth.recordPollFailure).toHaveBeenCalledTimes(1);
       expect(accountsRepo.update).toHaveBeenCalledWith(
         { id: 'a1', status: AccountStatus.PENDING_PAYMENT },
         { status: AccountStatus.PENDING_CLAIM },
@@ -631,6 +636,7 @@ describe('PaymentMonitorService', () => {
       // Both accounts were attempted
       expect(mockPaymentsBuilder.forAccount).toHaveBeenCalledWith('GPK1');
       expect(mockPaymentsBuilder.forAccount).toHaveBeenCalledWith('GPK2');
+      expect(paymentMonitorHealth.recordPollFailure).toHaveBeenCalledTimes(1);
     });
 
     it('does not update DB when Horizon call fails for an account', async () => {
