@@ -44,4 +44,28 @@ describe('ClaimVerificationResponseDto', () => {
       expiresAt: '2026-02-21T10:30:00.000Z',
     });
   });
+
+  it('does not expose sensitive fields in the allow-listed response', () => {
+    const dto = new ClaimVerificationResponseDto();
+    dto.valid = true;
+    dto.accountId = '4ebae33b-5b93-424c-858d-d79afc708af5';
+    dto.amount = '100.0000000';
+    dto.asset = 'native';
+    dto.expiresAt = new Date('2026-02-21T10:30:00Z');
+
+    const serialized = instanceToPlain(dto) as Record<string, unknown>;
+    const allowedKeys = ['valid', 'accountId', 'amount', 'asset', 'expiresAt'];
+    const forbiddenKeys = [
+      'secret',
+      'rawToken',
+      'claimToken',
+      'token',
+      'password',
+    ];
+
+    expect(Object.keys(serialized).sort()).toEqual([...allowedKeys].sort());
+    for (const key of forbiddenKeys) {
+      expect(serialized).not.toHaveProperty(key);
+    }
+  });
 });
