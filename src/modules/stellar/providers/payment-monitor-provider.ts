@@ -17,7 +17,11 @@ import { AccountEventsProvider } from '../../account-events/providers/account-ev
 /**
  * PaymentMonitorProvider - Horizon SSE-based payment detection
  *
- * ## Responsibility boundary (#1032)
+ * ## Responsibility boundary (#1032, #1091)
+ *
+ * Boundary: owns per-account Horizon SSE stream detection (push). It does not
+ * own scheduled batch polling or historical paging — that belongs to
+ * `PaymentMonitorService`.
  *
  * Owns one long-lived Horizon SSE stream per watched account: it opens the
  * stream with a `now` cursor, reacts to inbound payment events, calls

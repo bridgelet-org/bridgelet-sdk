@@ -26,7 +26,10 @@ import { AccountEventsProvider } from '../account-events/providers/account-event
 /**
  * PaymentMonitorService - interval-based payment detection.
  *
- * ## Responsibility boundary (#1032)
+ * ## Responsibility boundary (#1032, #1091)
+ *
+ * Boundary: owns interval batch polling of pending accounts (pull). It does not
+ * own per-account SSE streams — that belongs to `PaymentMonitorProvider`.
  *
  * Owns the scheduled, batch-oriented poll of every unexpired `PENDING_PAYMENT`
  * account: it asks Horizon for payment operations, follows paging tokens, calls
