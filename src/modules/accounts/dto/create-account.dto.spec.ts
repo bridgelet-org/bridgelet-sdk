@@ -213,3 +213,27 @@ describe('CreateAccountDto — asset_code/asset_issuer combination', () => {
     expect(errors).toContain('asset_issuer');
   });
 });
+
+// ─── metadata bounds (#1079) ─────────────────────────────────────────────────
+describe('CreateAccountDto — metadata bounds', () => {
+  it('rejects metadata that exceeds the serialized size limit', async () => {
+    const errors = await errorsFor({
+      metadata: { payload: 'x'.repeat(5000) },
+    });
+    expect(errors).toContain('metadata');
+  });
+
+  it('rejects metadata nested deeper than the allowed depth', async () => {
+    const errors = await errorsFor({
+      metadata: { a: { b: { c: { d: 'too deep' } } } },
+    });
+    expect(errors).toContain('metadata');
+  });
+
+  it('accepts metadata within size and depth limits', async () => {
+    const errors = await errorsFor({
+      metadata: { userId: 'user_123', nested: { ok: true } },
+    });
+    expect(errors).not.toContain('metadata');
+  });
+});
