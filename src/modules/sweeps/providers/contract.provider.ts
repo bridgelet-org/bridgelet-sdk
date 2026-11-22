@@ -59,14 +59,14 @@ export class ContractProvider implements OnModuleInit {
       'stellar.sorobanRpcUrl',
     );
 
-    // #648: sourced from config, not a literal, so the reported version
+    // #648/#1087: sourced from config, not a literal, so the reported version
     // tracks the contract that is actually deployed. `get` (not
-    // `getOrThrow`) because an unset version is reported as 'unknown'
-    // rather than preventing the service from starting.
-    this.contractVersion =
-      this.configService.get<string>(
-        'stellar.contracts.ephemeralAccountVersion',
-      ) ?? UNKNOWN_CONTRACT_VERSION;
+    // `getOrThrow`) because an unset/blank version is reported as 'unknown'
+    // rather than preventing the service from starting or exposing a stale literal.
+    const configuredVersion = this.configService
+      .get<string>('stellar.contracts.ephemeralAccountVersion')
+      ?.trim();
+    this.contractVersion = configuredVersion || UNKNOWN_CONTRACT_VERSION;
 
     // #729: stellar.config.ts rejects anything but 'mainnet' | 'testnet' at
     // load time. Re-check here so a mis-mocked or bypassed config can't
