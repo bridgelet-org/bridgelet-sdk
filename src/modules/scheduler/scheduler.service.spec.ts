@@ -11,6 +11,7 @@ import { AccountMetricsProvider } from '../../common/metrics/account-metrics.pro
 import { getToken } from '@willsoto/nestjs-prometheus';
 import { AccountEventsProvider } from '../account-events/providers/account-events.provider.js';
 import { AccountReclamationProvider } from './providers/account-reclamation.provider.js';
+import { ContractEventRetentionProvider } from './providers/contract-event-retention.provider.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -51,6 +52,10 @@ const mockAccountReclamationProvider = {
   runPending: jest.fn().mockResolvedValue(undefined),
 };
 
+const mockContractEventRetentionProvider = {
+  run: jest.fn().mockResolvedValue(undefined),
+};
+
 describe('SchedulerService', () => {
   let service: SchedulerService;
   let stellarService: {
@@ -71,6 +76,7 @@ describe('SchedulerService', () => {
   beforeEach(async () => {
     mockAccountEventsProvider.record.mockClear();
     mockAccountReclamationProvider.runPending.mockClear();
+    mockContractEventRetentionProvider.run.mockClear();
     accountsRepo = {
       find: jest.fn<() => Promise<Account[]>>().mockResolvedValue([]),
       update: jest.fn<() => Promise<any>>().mockResolvedValue({ affected: 1 }),
@@ -90,6 +96,7 @@ describe('SchedulerService', () => {
           'app.initializingCleanupIntervalMs': '900000',
           'app.initializingTimeoutMs': '600000',
           'app.reclamationCheckIntervalMs': '60000',
+          'app.contractEventRetentionCheckIntervalMs': '3600000',
           'app.stuckAccountThresholdMs': '600000',
         };
         if (!(key in map)) throw new Error(`Config key not found: ${key}`);
@@ -129,6 +136,10 @@ describe('SchedulerService', () => {
           provide: AccountReclamationProvider,
           useValue: mockAccountReclamationProvider,
         },
+        {
+          provide: ContractEventRetentionProvider,
+          useValue: mockContractEventRetentionProvider,
+        },
       ],
     }).compile();
 
@@ -144,11 +155,11 @@ describe('SchedulerService', () => {
   // -------------------------------------------------------------------------
 
   describe('onModuleInit / onModuleDestroy', () => {
-    it('starts three interval runners on init and clears all on destroy', () => {
+    it('starts four interval runners on init and clears all on destroy', () => {
       // Restore the beforeEach no-op spy so we hit the real implementation
       jest.restoreAllMocks();
 
-      const handles = [111, 222, 333];
+      const handles = [111, 222, 333, 444];
       let callCount = 0;
       const setTimeoutSpy = jest
         .spyOn(global, 'setTimeout')
@@ -158,12 +169,13 @@ describe('SchedulerService', () => {
         .mockImplementation(() => undefined);
 
       service.onModuleInit();
-      expect(setTimeoutSpy).toHaveBeenCalledTimes(3);
+      expect(setTimeoutSpy).toHaveBeenCalledTimes(4);
 
       service.onModuleDestroy();
       expect(clearTimeoutSpy).toHaveBeenCalledWith(111);
       expect(clearTimeoutSpy).toHaveBeenCalledWith(222);
       expect(clearTimeoutSpy).toHaveBeenCalledWith(333);
+      expect(clearTimeoutSpy).toHaveBeenCalledWith(444);
 
       setTimeoutSpy.mockRestore();
       clearTimeoutSpy.mockRestore();
