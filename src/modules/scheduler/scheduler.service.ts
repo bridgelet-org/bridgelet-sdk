@@ -21,6 +21,7 @@ import { InjectMetric } from '@willsoto/nestjs-prometheus';
 import { Counter } from 'prom-client';
 import { AccountEventsProvider } from '../account-events/providers/account-events.provider.js';
 import { AccountReclamationProvider } from './providers/account-reclamation.provider.js';
+import { ContractEventRetentionProvider } from './providers/contract-event-retention.provider.js';
 
 @Injectable()
 export class SchedulerService implements OnModuleInit, OnModuleDestroy {
@@ -28,6 +29,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
   private expiryRunner: IntervalJobRunner | null = null;
   private initializingRunner: IntervalJobRunner | null = null;
   private reclamationRunner: IntervalJobRunner | null = null;
+  private retentionRunner: IntervalJobRunner | null = null;
   private readonly notifiedStuckAccounts = new Set<string>();
 
   constructor(
@@ -41,6 +43,7 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     private readonly expiryJobFailuresCounter: Counter<string>,
     private readonly accountEventsProvider: AccountEventsProvider,
     private readonly accountReclamationProvider: AccountReclamationProvider,
+    private readonly contractEventRetentionProvider: ContractEventRetentionProvider,
   ) {}
 
   onModuleInit(): void {
@@ -54,6 +57,11 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     );
     const reclamationIntervalMs = Number(
       this.configService.getOrThrow<number>('app.reclamationCheckIntervalMs'),
+    );
+    const retentionIntervalMs = Number(
+      this.configService.getOrThrow<number>(
+        'app.contractEventRetentionCheckIntervalMs',
+      ),
     );
 
     this.expiryRunner = this.createRunner(
@@ -74,9 +82,15 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
       () => this.accountReclamationProvider.runPending(),
       'Account reclamation',
     );
+    this.retentionRunner = this.createRunner(
+      retentionIntervalMs,
+      () => this.contractEventRetentionProvider.run(),
+      'Contract event retention',
+    );
     this.expiryRunner.start();
     this.initializingRunner.start();
     this.reclamationRunner.start();
+    this.retentionRunner.start();
 
     this.logger.log(`Expiry job started (interval: ${expiryIntervalMs}ms)`);
     this.logger.log(
@@ -85,15 +99,20 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(
       `Account reclamation started (interval: ${reclamationIntervalMs}ms)`,
     );
+    this.logger.log(
+      `Contract event retention started (interval: ${retentionIntervalMs}ms)`,
+    );
   }
 
   onModuleDestroy(): void {
     this.expiryRunner?.stop();
     this.initializingRunner?.stop();
     this.reclamationRunner?.stop();
+    this.retentionRunner?.stop();
     this.expiryRunner = null;
     this.initializingRunner = null;
     this.reclamationRunner = null;
+    this.retentionRunner = null;
     this.logger.log('Scheduler jobs stopped');
   }
 

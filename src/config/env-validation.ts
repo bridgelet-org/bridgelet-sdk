@@ -37,12 +37,27 @@ export function validateEnv(env: NodeJS.ProcessEnv = process.env): void {
     'INITIALIZING_CLEANUP_INTERVAL_MS',
     'INITIALIZING_TIMEOUT_MS',
     'RECLAMATION_CHECK_INTERVAL_MS',
+    'CONTRACT_EVENT_RETENTION_BATCH_SIZE',
+    'CONTRACT_EVENT_RETENTION_CHECK_INTERVAL_MS',
   ]) {
     const raw = env[key];
     if (raw === undefined || raw.trim() === '') continue;
     const value = Number(raw);
     if (!Number.isFinite(value) || value <= 0) {
       errors.push(`${key} must be a positive number`);
+    }
+  }
+
+  // #1092: the retention window may be 0 to disable the job (the default), so
+  // it is validated separately from the strictly-positive interval settings.
+  const retentionWindowRaw = env.CONTRACT_EVENT_RETENTION_LEDGER_WINDOW;
+  if (retentionWindowRaw !== undefined && retentionWindowRaw.trim() !== '') {
+    const value = Number(retentionWindowRaw);
+    if (!Number.isInteger(value) || value < 0) {
+      errors.push(
+        'CONTRACT_EVENT_RETENTION_LEDGER_WINDOW must be a non-negative ' +
+          'integer (0 disables retention)',
+      );
     }
   }
 

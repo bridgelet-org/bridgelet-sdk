@@ -289,12 +289,23 @@ nothing about size, and a growing table makes both `VACUUM` and index
 maintenance progressively more expensive. Plan for this before the table gets
 large rather than after:
 
-1. **Retention first.** Decide how far back events must be queryable. If the
-   table is a cache of on-chain data, old rows are re-derivable from Horizon or
-   the Soroban RPC and do not need to live here forever. A scheduled delete by
-   `ledger_sequence` (not `created_at` — ledger sequence is the authoritative
-   ordering) is the simplest effective step, and `SchedulerModule` already hosts
-   comparable cleanup jobs.
+1. **Retention first — implemented.** `ContractEventRetentionProvider`, run by
+   `SchedulerService` from `SchedulerModule`, deletes rows whose
+   `ledger_sequence` falls below a cutoff of
+   `highest stored ledger_sequence - CONTRACT_EVENT_RETENTION_LEDGER_WINDOW`.
+   The cutoff uses ledger sequence, **not** `created_at`, because ledger
+   sequence is the authoritative ordering for on-chain events. Deletes are
+   bounded to `CONTRACT_EVENT_RETENTION_BATCH_SIZE` rows per transaction and are
+   idempotent/safe to retry (each pass re-reads the same fixed cutoff and keeps
+   only the newest rows). The job runs every
+   `CONTRACT_EVENT_RETENTION_CHECK_INTERVAL_MS` and reports
+   `contract_event_retention_deleted_total` /
+   `contract_event_retention_failures_total` to Prometheus plus structured
+   logs. Retention is **opt-in**: the default window is `0`, which disables
+   deletion entirely and preserves the previous append-only behaviour. Set a
+   positive window once the desired queryable history is decided; if the table
+   is a cache of on-chain data, old rows are re-derivable from Horizon or the
+   Soroban RPC and do not need to live here forever.
 2. **Then partitioning, if retention is not enough.** Declarative range
    partitioning on `ledger_sequence` turns retention into `DROP TABLE` on an old
    partition instead of a bulk `DELETE` plus `VACUUM`, and lets PostgreSQL prune

@@ -39,6 +39,20 @@ export default registerAs('app', () => ({
     process.env.RECLAMATION_CHECK_INTERVAL_MS ?? '60000',
     10,
   ),
+  // Append-only contract_events retention (#1092). Window 0 (the default)
+  // disables deletion so existing deployments keep their current behaviour.
+  contractEventRetentionLedgerWindow: parseInt(
+    process.env.CONTRACT_EVENT_RETENTION_LEDGER_WINDOW ?? '0',
+    10,
+  ),
+  contractEventRetentionBatchSize: parseInt(
+    process.env.CONTRACT_EVENT_RETENTION_BATCH_SIZE ?? '1000',
+    10,
+  ),
+  contractEventRetentionCheckIntervalMs: parseInt(
+    process.env.CONTRACT_EVENT_RETENTION_CHECK_INTERVAL_MS ?? '3600000',
+    10,
+  ),
   kmsEnabled: process.env.KMS_ENABLED !== 'false',
   kmsKeyId: process.env.KMS_KEY_ID,
   awsRegion: process.env.AWS_REGION ?? 'us-east-1',

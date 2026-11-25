@@ -19,6 +19,9 @@ describe('app.config', () => {
     delete process.env.JWT_SECRET;
     delete process.env.CLAIM_TOKEN_EXPIRY;
     delete process.env.LOG_LEVEL;
+    delete process.env.CONTRACT_EVENT_RETENTION_LEDGER_WINDOW;
+    delete process.env.CONTRACT_EVENT_RETENTION_BATCH_SIZE;
+    delete process.env.CONTRACT_EVENT_RETENTION_CHECK_INTERVAL_MS;
   });
 
   afterEach(() => {
@@ -26,6 +29,9 @@ describe('app.config', () => {
     delete process.env.NODE_ENV;
     delete process.env.JWT_SECRET;
     delete process.env.CLAIM_TOKEN_EXPIRY;
+    delete process.env.CONTRACT_EVENT_RETENTION_LEDGER_WINDOW;
+    delete process.env.CONTRACT_EVENT_RETENTION_BATCH_SIZE;
+    delete process.env.CONTRACT_EVENT_RETENTION_CHECK_INTERVAL_MS;
   });
 
   it('returns defaults when env vars are not set', async () => {
@@ -61,6 +67,26 @@ describe('app.config', () => {
     const mod = await import('./app.config.js');
     const config = (mod.default as unknown as ConfigFactory)();
     expect(config.claimTokenExpiry).toBe(86400);
+  });
+
+  // #1092: contract event retention defaults must preserve existing behaviour.
+  it('defaults contract event retention to disabled with safe batch/interval values', async () => {
+    const mod = await import('./app.config.js');
+    const config = (mod.default as unknown as ConfigFactory)();
+    expect(config.contractEventRetentionLedgerWindow).toBe(0);
+    expect(config.contractEventRetentionBatchSize).toBe(1000);
+    expect(config.contractEventRetentionCheckIntervalMs).toBe(3600000);
+  });
+
+  it('reads contract event retention settings from the environment when set', async () => {
+    process.env.CONTRACT_EVENT_RETENTION_LEDGER_WINDOW = '50000';
+    process.env.CONTRACT_EVENT_RETENTION_BATCH_SIZE = '250';
+    process.env.CONTRACT_EVENT_RETENTION_CHECK_INTERVAL_MS = '600000';
+    const mod = await import('./app.config.js');
+    const config = (mod.default as unknown as ConfigFactory)();
+    expect(config.contractEventRetentionLedgerWindow).toBe(50000);
+    expect(config.contractEventRetentionBatchSize).toBe(250);
+    expect(config.contractEventRetentionCheckIntervalMs).toBe(600000);
   });
 });
 
@@ -344,5 +370,37 @@ describe('validateEnv - CLAIM_BASE_URL', () => {
         NODE_ENV: 'test',
       }),
     ).not.toThrow();
+  });
+
+  // #1092: 0 is a valid (disabled) retention window; negatives are not.
+  it('accepts a zero or positive contract event retention window', async () => {
+    const { validateEnv } = await import('./env-validation.js');
+    expect(() =>
+      validateEnv({
+        ...baseValidEnv,
+        NODE_ENV: 'development',
+        CONTRACT_EVENT_RETENTION_LEDGER_WINDOW: '0',
+      }),
+    ).not.toThrow();
+    expect(() =>
+      validateEnv({
+        ...baseValidEnv,
+        NODE_ENV: 'development',
+        CONTRACT_EVENT_RETENTION_LEDGER_WINDOW: '50000',
+      }),
+    ).not.toThrow();
+  });
+
+  it('rejects a negative contract event retention window', async () => {
+    const { validateEnv } = await import('./env-validation.js');
+    expect(() =>
+      validateEnv({
+        ...baseValidEnv,
+        NODE_ENV: 'development',
+        CONTRACT_EVENT_RETENTION_LEDGER_WINDOW: '-1',
+      }),
+    ).toThrow(
+      'CONTRACT_EVENT_RETENTION_LEDGER_WINDOW must be a non-negative integer',
+    );
   });
 });
