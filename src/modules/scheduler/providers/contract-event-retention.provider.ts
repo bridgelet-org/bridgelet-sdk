@@ -137,9 +137,7 @@ export class ContractEventRetentionProvider {
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         this.failuresCounter.inc();
-        this.logger.error(
-          `Contract event retention delete failed: ${message}`,
-        );
+        this.logger.error(`Contract event retention delete failed: ${message}`);
         return;
       }
 

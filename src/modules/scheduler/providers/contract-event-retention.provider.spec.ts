@@ -14,16 +14,15 @@ interface CounterMock {
   inc: jest.Mock;
 }
 
-const makeEvent = (id: string, ledgerSequence: string): ContractEvent =>
-  ({
-    id,
-    ledgerSequence,
-    eventType: 'transfer',
-    contractAddress: 'CCONTRACT',
-    txHash: 'tx-hash',
-    payload: {},
-    createdAt: new Date('2026-01-01T00:00:00.000Z'),
-  }) as ContractEvent;
+const makeEvent = (id: string, ledgerSequence: string): ContractEvent => ({
+  id,
+  ledgerSequence,
+  eventType: 'transfer',
+  contractAddress: 'CCONTRACT',
+  txHash: 'tx-hash',
+  payload: {},
+  createdAt: new Date('2026-01-01T00:00:00.000Z'),
+});
 
 describe('ContractEventRetentionProvider (#1092)', () => {
   let provider: ContractEventRetentionProvider;
@@ -77,7 +76,7 @@ describe('ContractEventRetentionProvider (#1092)', () => {
     const idOperator = repository.delete.mock.calls[callIndex][0]
       .id as FindOperator<string[]>;
     expect(idOperator.type).toBe('in');
-    return idOperator.value as string[];
+    return idOperator.value;
   };
 
   it('is a no-op when the retention window is 0 (the default)', async () => {
